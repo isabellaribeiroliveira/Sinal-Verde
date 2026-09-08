@@ -1,2365 +1,1483 @@
 /* =====================================================================
-   SINAL VERDE — Protótipo funcional (arquivo único de script)
-   Baseado no PRD "Sistema Sinal Verde".
-
-   Este arquivo concentra TODO o JavaScript do aplicativo de propósito —
-   a pedido, para manter apenas 3 arquivos (index.html, style.css,
-   script.js) e não depender de nenhuma pasta extra.
-
-   Sem dependências externas: os ícones estão embutidos aqui mesmo
-   (seção ÍCONES, abaixo) e não é feita nenhuma chamada de rede para
-   o app funcionar. Só a fonte do navegador é usada (system font).
-
-   IMPORTANTE (limitações deste protótipo):
-   - Todos os dados vivem em memória (variável DB). Ao recarregar a
-     página, tudo volta ao estado inicial semeado em seed().
-   - Não há backend, banco de dados ou autenticação real: o login
-     apenas seleciona um perfil de demonstração.
-   - As regras de fluxo são simuladas no cliente para fins de demons-
-     tração da UX; em produção, toda regra de negócio deve ser
-     validada no servidor.
+   PPG — Programa Política de Gestão
+   v4.0 — dados organizacionais coerentes (via empresa.config.js),
+   questionário estilo Duolingo, perfis totalmente separados, menu
+   expansível/recolhível, Banco de Perguntas, Auditoria e drill-down.
    ===================================================================== */
 
+/* ======================= DADOS DERIVADOS DA CONFIGURAÇÃO DA EMPRESA =======================
+   Tudo aqui vem de window.EMPRESA_CONFIG (empresa.config.js). Nenhuma lista de
+   setor/função/filial é mantida solta neste arquivo — isso evita combinações
+   incoerentes como "setor ELÉTRICA + função GERENTE DE CSC". */
+const EMPRESA = window.EMPRESA_CONFIG;
+const SETORES = EMPRESA.setores.map(s => s.nome);
+const UNIDADES = EMPRESA.filiais;
+const FUNCOES = [...new Set(EMPRESA.setores.flatMap(s => s.funcoes))];
+const CARGOS_IMPEDIDOS = EMPRESA.cargosImpedidos;
+const CARGOS_PERMITIDOS = FUNCOES.filter(f => !CARGOS_IMPEDIDOS.includes(f));
 
-// ======================================================================
-// ÍCONES — conjunto próprio, embutido, sem depender de nenhum CDN.
-// Cada entrada é o conteúdo interno de um <svg viewBox="0 0 24 24">
-// no mesmo estilo (traço 2px, cantos arredondados). Assim o app nunca
-// depende de internet para exibir ícones.
-// ======================================================================
-const ICONS = {
-  'arrow-left': '<line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/>',
-  'arrow-right': '<line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/>',
-  'activity': '<polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>',
-  'alert-triangle': '<path d="M12 2 2 20h20L12 2z"/><line x1="12" y1="9" x2="12" y2="14"/><line x1="12" y1="17.3" x2="12" y2="17.31"/>',
-  'badge-check': '<circle cx="12" cy="12" r="9"/><path d="M8.5 12.5l2 2 5-5"/>',
-  'bar-chart-3': '<line x1="6" y1="20" x2="6" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="18" y1="20" x2="18" y2="14"/>',
-  'bell': '<path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/>',
-  'bell-off': '<path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/><line x1="3" y1="3" x2="21" y2="21"/>',
-  'briefcase': '<rect x="3" y="7" width="18" height="12" rx="2"/><path d="M8 7V5a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="3" y1="12" x2="21" y2="12"/>',
-  'calculator': '<rect x="4" y="2" width="16" height="20" rx="2"/><rect x="7" y="5" width="10" height="4"/><line x1="8" y1="13" x2="8" y2="13.01"/><line x1="12" y1="13" x2="12" y2="13.01"/><line x1="16" y1="13" x2="16" y2="13.01"/><line x1="8" y1="17" x2="8" y2="17.01"/><line x1="12" y1="17" x2="12" y2="17.01"/><line x1="16" y1="17" x2="16" y2="17.01"/>',
-  'calendar': '<rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/>',
-  'calendar-check': '<rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/><path d="M9 16l2 2 4-4"/>',
-  'calendar-plus': '<rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/><line x1="12" y1="14" x2="12" y2="18"/><line x1="10" y1="16" x2="14" y2="16"/>',
-  'check': '<polyline points="20 6 9 17 4 12"/>',
-  'check-circle-2': '<circle cx="12" cy="12" r="9"/><path d="M8.5 12.5l2.5 2.5 5-5.5"/>',
-  'chevron-right': '<polyline points="9 6 15 12 9 18"/>',
-  'circle-dollar-sign': '<circle cx="12" cy="12" r="9"/><path d="M14.8 9.5c-.3-1-1.3-1.7-2.8-1.7-1.7 0-2.8.9-2.8 2s1 1.6 2.8 2 2.8.8 2.8 2-1.1 2-2.8 2c-1.5 0-2.5-.6-2.8-1.6"/><line x1="12" y1="6" x2="12" y2="18"/>',
-  'clipboard-check': '<rect x="6" y="4" width="12" height="18" rx="2"/><path d="M9 4V3a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v1"/><path d="M9 13l2 2 4-4"/>',
-  'clock': '<circle cx="12" cy="12" r="9"/><polyline points="12 7 12 12 16 14"/>',
-  'coffee': '<path d="M4 9h13v6a4 4 0 0 1-4 4H8a4 4 0 0 1-4-4V9z"/><path d="M17 10h1a2 2 0 0 1 0 4h-1"/><path d="M7 2c0 1-1 1-1 2s1 1 1 2"/><path d="M11 2c0 1-1 1-1 2s1 1 1 2"/>',
-  'coins': '<circle cx="9" cy="9" r="6"/><circle cx="15" cy="15" r="6"/>',
-  'construction': '<rect x="3" y="14" width="18" height="6" rx="1"/><path d="M6 14V8a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v6"/><line x1="9" y1="4" x2="9" y2="6"/><line x1="15" y1="4" x2="15" y2="6"/>',
-  'eye': '<path d="M2 12s4-7 10-7 10 7 10 7-4 7-10 7-10-7-10-7z"/><circle cx="12" cy="12" r="3"/>',
-  'eye-off': '<path d="M2 12s4-7 10-7c2 0 3.7.6 5.2 1.5"/><path d="M22 12s-1.3 2.3-3.5 4.2"/><path d="M9.9 9.9a3 3 0 0 0 4.2 4.2"/><line x1="3" y1="3" x2="21" y2="21"/>',
-  'file-check-2': '<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><path d="M9 15l2 2 4-4"/>',
-  'file-text': '<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="8" y1="13" x2="16" y2="13"/><line x1="8" y1="17" x2="16" y2="17"/>',
-  'flag': '<path d="M5 3v18"/><path d="M5 4h11l-2 4 2 4H5"/>',
-  'gauge': '<circle cx="12" cy="13" r="8"/><path d="M12 13l4-4"/><line x1="8" y1="5.5" x2="8.5" y2="7"/><line x1="16" y1="5.5" x2="15.5" y2="7"/>',
-  'history': '<path d="M3 12a9 9 0 1 0 3-6.7"/><polyline points="3 4 3 9 8 9"/><polyline points="12 8 12 12 15 14"/>',
-  'inbox': '<polyline points="4 12 8 12 10 15 14 15 16 12 20 12"/><path d="M5.5 5h13l2.5 7v7a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1v-7z"/>',
-  'info': '<circle cx="12" cy="12" r="9"/><line x1="12" y1="11" x2="12" y2="16"/><line x1="12" y1="7.9" x2="12" y2="7.91"/>',
-  'landmark': '<line x1="3" y1="22" x2="21" y2="22"/><line x1="6" y1="18" x2="6" y2="11"/><line x1="10" y1="18" x2="10" y2="11"/><line x1="14" y1="18" x2="14" y2="11"/><line x1="18" y1="18" x2="18" y2="11"/><path d="M3 11l9-6 9 6"/>',
-  'layout-dashboard': '<rect x="3" y="3" width="8" height="9" rx="1"/><rect x="13" y="3" width="8" height="5" rx="1"/><rect x="13" y="10" width="8" height="11" rx="1"/><rect x="3" y="14" width="8" height="7" rx="1"/>',
-  'layout-grid': '<rect x="3" y="3" width="8" height="8" rx="1"/><rect x="13" y="3" width="8" height="8" rx="1"/><rect x="3" y="13" width="8" height="8" rx="1"/><rect x="13" y="13" width="8" height="8" rx="1"/>',
-  'lightbulb': '<path d="M9 18h6"/><path d="M10 22h4"/><path d="M15.09 14c.18-.98.65-1.74 1.41-2.5A4.65 4.65 0 0 0 18 8 6 6 0 0 0 6 8c0 1 .23 2.23 1.5 3.5A4.61 4.61 0 0 1 8.91 14"/>',
-  'list-checks': '<path d="M3 6l1.3 1.3L7 5"/><line x1="10" y1="6" x2="21" y2="6"/><path d="M3 12l1.3 1.3L7 11"/><line x1="10" y1="12" x2="21" y2="12"/><path d="M3 18l1.3 1.3L7 17"/><line x1="10" y1="18" x2="21" y2="18"/>',
-  'list-plus': '<line x1="3" y1="6" x2="15" y2="6"/><line x1="3" y1="12" x2="15" y2="12"/><line x1="3" y1="18" x2="11" y2="18"/><line x1="19" y1="14" x2="19" y2="20"/><line x1="16" y1="17" x2="22" y2="17"/>',
-  'lock': '<rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/>',
-  'mail': '<rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 6l9 7 9-7"/>',
-  'mail-check': '<rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 6l9 7 9-7"/><path d="M16 16.5l1.4 1.4L21 14.5"/>',
-  'paperclip': '<path d="M21 12.5l-9 9a5 5 0 0 1-7-7l9-9a3.5 3.5 0 0 1 5 5l-8 8a2 2 0 0 1-3-3l7-7"/>',
-  'pencil': '<path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/>',
-  'percent': '<line x1="19" y1="5" x2="5" y2="19"/><circle cx="7" cy="7" r="2.2"/><circle cx="17" cy="17" r="2.2"/>',
-  'play': '<polygon points="6 3 20 12 6 21"/>',
-  'plus': '<line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>',
-  'rocket': '<path d="M12 2c3 2 5 6 5 10 0 3-2 5-5 8-3-3-5-5-5-8 0-4 2-8 5-10z"/><circle cx="12" cy="10" r="1.5"/><path d="M8.5 16.5L6 19"/><path d="M15.5 16.5L18 19"/>',
-  'rotate-ccw': '<path d="M3 12a9 9 0 1 0 3-6.7"/><polyline points="3 4 3 9 8 9"/>',
-  'save': '<path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/>',
-  'scale': '<path d="M12 3v18"/><path d="M5 7l-3 6a3.5 3.5 0 0 0 6 0z"/><path d="M19 7l-3 6a3.5 3.5 0 0 0 6 0z"/><path d="M5 7h14"/><path d="M8 21h8"/>',
-  'search': '<circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>',
-  'search-x': '<circle cx="11" cy="11" r="7"/><line x1="8.5" y1="8.5" x2="13.5" y2="13.5"/><line x1="13.5" y1="8.5" x2="8.5" y2="13.5"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>',
-  'send': '<line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/>',
-  'settings': '<circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M4.2 4.2l2.1 2.1M17.7 17.7l2.1 2.1M2 12h3M19 12h3M4.2 19.8l2.1-2.1M17.7 6.3l2.1-2.1"/>',
-  'shield': '<path d="M12 2l8 4v6c0 5-3.5 8-8 10-4.5-2-8-5-8-10V6z"/>',
-  'shield-check': '<path d="M12 2l8 4v6c0 5-3.5 8-8 10-4.5-2-8-5-8-10V6z"/><path d="M9 12l2 2 4-4"/>',
-  'sparkles': '<path d="M12 3l1.5 4.5L18 9l-4.5 1.5L12 15l-1.5-4.5L6 9l4.5-1.5z"/><path d="M19 15l.6 1.9 1.9.6-1.9.6-.6 1.9-.6-1.9-1.9-.6 1.9-.6z"/>',
-  'table': '<rect x="3" y="4" width="18" height="16" rx="1"/><line x1="3" y1="10" x2="21" y2="10"/><line x1="9" y1="4" x2="9" y2="20"/>',
-  'thumbs-up': '<path d="M7 10v11H4a1 1 0 0 1-1-1v-9a1 1 0 0 1 1-1z"/><path d="M7 10l4-7a2 2 0 0 1 3.6 1.7L13.5 9H19a2 2 0 0 1 2 2.3l-1.4 7A2 2 0 0 1 17.6 20H7"/>',
-  'trending-up': '<polyline points="3 17 9 11 13 15 21 7"/><polyline points="14 7 21 7 21 14"/>',
-  'upload': '<path d="M12 16V4"/><polyline points="7 9 12 4 17 9"/><path d="M4 16v3a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-3"/>',
-  'user': '<circle cx="12" cy="8" r="4"/><path d="M4 21c0-4 4-7 8-7s8 3 8 7"/>',
-  'user-cog': '<circle cx="10" cy="8" r="4"/><path d="M2 21c0-4 3.5-7 8-7"/><circle cx="18" cy="17" r="2.3"/><path d="M18 13.3v1.2M18 19.5v1.2M14.9 15.2l1 .8M21.1 18l1 .8M13.7 17h1.3M21 17h1.3M14.9 18.8l1-.8M21.1 16l1-.8"/>',
-  'user-plus': '<circle cx="9" cy="8" r="4"/><path d="M2 21c0-4 3.5-7 7-7s7 3 7 7"/><line x1="19" y1="8" x2="19" y2="14"/><line x1="16" y1="11" x2="22" y2="11"/>',
-  'users': '<circle cx="9" cy="8" r="3.5"/><path d="M2.5 21c0-3.5 3-6 6.5-6s6.5 2.5 6.5 6"/><circle cx="17.5" cy="9" r="3"/><path d="M23 21c0-2.8-1.8-5-4.5-5.7"/>',
-  'x': '<line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>',
-  'x-circle': '<circle cx="12" cy="12" r="9"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/>',
-  'award': '<circle cx="12" cy="8" r="6"/><path d="M9 13.5L7.5 21l4.5-2.5 4.5 2.5-1.5-7.5"/>',
-  'circle': '<circle cx="12" cy="12" r="9"/>',
-};
+const NOMES = []; // não é mais usado — participantes agora vêm do quadro real (EMPRESA.colaboradores)
 
-// Compatibilidade: mantemos um objeto global "lucide" com createIcons()
-// como no-op, porque nada mais no código depende dele — os ícones agora
-// já nascem como SVG dentro do próprio HTML gerado, sem CDN e sem
-// processamento assíncrono depois de inserir na página.
-const lucide = { createIcons: function () {} };
+function randomFrom(arr){return arr[Math.floor(Math.random()*arr.length)];}
+function pad(n){return n.toString().padStart(2,'0');}
+function fmtDateTime(d){return pad(d.getDate())+"/"+pad(d.getMonth()+1)+"/"+d.getFullYear()+" "+pad(d.getHours())+":"+pad(d.getMinutes());}
+function opt(text, correct){ return {text, correct: !!correct}; }
 
-/* ============================================================
-   SINAL VERDE — Constantes e metadados de domínio
-   Parte do protótipo do Programa Sinal Verde (ver /README.md).
-   ============================================================ */
-
-// ======================================================================
-// CONSTANTES / METADADOS
-// ======================================================================
-const AREAS = ['Manutenção', 'Operação', 'Oficina', 'Administrativo', 'Logística', 'Segurança do Trabalho'];
-
-const STATUS_META = {
-  rascunho:            { label: 'Rascunho',                              cls: 'badge-gray' },
-  enviada:             { label: 'Enviada',                               cls: 'badge-info' },
-  recebida:            { label: 'Recebida pela Qualidade',               cls: 'badge-info' },
-  aguardando_reuniao:  { label: 'Aguardando Reunião',                    cls: 'badge-warning' },
-  em_analise_comite:   { label: 'Em análise pelo Comitê',                cls: 'badge-info' },
-  aguardando_decisao:  { label: 'Aguardando decisão da Qualidade',       cls: 'badge-warning' },
-  carta_elaboracao:    { label: 'Carta em elaboração',                   cls: 'badge-info' },
-  carta_analista:      { label: 'Carta — aprovação da Analista',         cls: 'badge-info' },
-  carta_gerente:       { label: 'Carta — aprovação da Gerente',          cls: 'badge-info' },
-  carta_diretoria:     { label: 'Carta — aprovação da Diretoria',        cls: 'badge-info' },
-  carta_pronta:        { label: 'Carta pronta para envio',               cls: 'badge-success' },
-  carta_enviada:       { label: 'Resposta enviada',                      cls: 'badge-success' },
-  implantacao:         { label: 'Implantação',                          cls: 'badge-info' },
-  acompanhamento:      { label: 'Em acompanhamento',                     cls: 'badge-info' },
-  concluida:           { label: 'Concluída',                            cls: 'badge-success' },
-};
-const ALL_STAGES = ['rascunho','enviada','recebida','aguardando_reuniao','em_analise_comite','aguardando_decisao',
-  'carta_elaboracao','carta_analista','carta_gerente','carta_diretoria','carta_pronta','carta_enviada',
-  'implantacao','acompanhamento','concluida'];
-
-const CHECKPOINTS = [
-  { label: 'Ideia enviada',              idx: 1 },
-  { label: 'Recebida pela Qualidade',    idx: 2 },
-  { label: 'Em análise pelo Comitê',     idx: 4 },
-  { label: 'Em avaliação da Qualidade',  idx: 5 },
-  { label: 'Carta em elaboração',        idx: 6 },
-  { label: 'Carta em aprovação',         idx: 9 },
-  { label: 'Retorno enviado',            idx: 11 },
-  { label: 'Implantação',               idx: 12 },
-  { label: 'Concluída',                 idx: 14 },
-];
-
-const KANBAN_COLUMNS = [
-  { key: 'recebida',            label: 'Recebidas' },
-  { key: 'aguardando_reuniao',  label: 'Aguardando Reunião' },
-  { key: 'em_analise_comite',   label: 'Em análise pelo Comitê' },
-  { key: 'aguardando_decisao',  label: 'Aguardando decisão' },
-  { key: 'carta_elaboracao',    label: 'Carta em elaboração' },
-  { key: 'carta_analista',      label: 'Analista' },
-  { key: 'carta_gerente',       label: 'Gerente' },
-  { key: 'carta_diretoria',     label: 'Diretoria' },
-  { key: 'carta_pronta',        label: 'Carta pronta' },
-  { key: 'implantacao',         label: 'Implantação' },
-  { key: 'acompanhamento',      label: 'Acompanhamento' },
-  { key: 'concluida',           label: 'Concluídas' },
-];
-
-const PRIORIDADE_META = {
-  baixa: { label: 'Baixa', cls: 'badge-gray' },
-  normal: { label: 'Normal', cls: 'badge-info' },
-  alta: { label: 'Alta', cls: 'badge-orange' },
-  critica: { label: 'Crítica', cls: 'badge-error' },
-};
-
-const STOPWORDS = new Set(['de','da','do','das','dos','em','no','na','nos','nas','para','com','por','uma','um','o','a','os','as','e','que','ao','à','aos']);
-
-
-/* ============================================================
-   SINAL VERDE — Funções utilitárias e helpers de UI
-   Parte do protótipo do Programa Sinal Verde (ver /README.md).
-   ============================================================ */
-
-// ======================================================================
-// HELPERS GERAIS
-// ======================================================================
-let _uidSeq = 1;
-function uid(prefix) { return `${prefix || 'X'}${Date.now().toString(36)}${(_uidSeq++)}`; }
-
-function nextProtocolo() {
-  DB.protocoloSeq += 1;
-  return `SV-2026-${String(DB.protocoloSeq).padStart(6, '0')}`;
+/* Geração de participantes fictícios para o modo de teste — mas usando
+   SEMPRE colaboradores reais do quadro ativo (planilha da empresa), nunca
+   nomes/combinações inventadas. Cada campanha sorteia um grupo de
+   colaboradores reais (sem repetir matrícula dentro da mesma campanha). */
+function buildParticipants(campaignId, count, pct100Count){
+  const list = [];
+  const sampled = EMPRESA.sortearColaboradores(count);
+  sampled.forEach((colab, i)=>{
+    const acertos = i < pct100Count ? 100 : [90,80,70,60][Math.floor(Math.random()*4)];
+    const d = new Date(2026, 5, 10 + Math.floor(i/4), 8 + (i%9), (i*7)%60);
+    list.push({
+      campaignId, nome: colab.nome, matricula: colab.matricula,
+      setor: colab.setor, filial: colab.filial, funcao: colab.funcao, cargo: colab.funcao,
+      data: d, pct: acertos, respostasCorretas: null
+    });
+  });
+  return list;
 }
 
-function fmtDate(iso) {
-  if (!iso) return '—';
-  const d = new Date(iso);
-  return d.toLocaleDateString('pt-BR');
+function isoLocal(d){
+  const p = n => String(n).padStart(2,'0');
+  return `${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`;
 }
-function fmtDateTime(iso) {
-  if (!iso) return '—';
-  const d = new Date(iso);
-  return `${d.toLocaleDateString('pt-BR')} ${d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}`;
-}
-function fmtMoney(v) {
-  return (v || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL', maximumFractionDigits: 0 });
-}
-function esc(s) { return (s || '').toString().replace(/[&<>"']/g, m => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[m])); }
-function icon(name, cls) {
-  const svg = ICONS[name] || ICONS['circle'];
-  return `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="icon ${cls || ''}">${svg}</svg>`;
-}
+const _hoje = new Date();
+const _inicioC1 = new Date(_hoje.getTime() - 20*24*60*60*1000);
+const _fimC1 = new Date(_hoje.getTime() + 20*24*60*60*1000);
 
-function addHistorico(idea, evento) {
-  idea.historico.push({ data: new Date().toISOString(), evento });
-}
-function addAudit(usuario, acao) {
-  DB.auditoria.unshift({ data: new Date().toISOString(), usuario, acao });
-}
-function addNotif(audience, texto, icone) {
-  DB.notificacoes.unshift({ id: uid('N'), audience, texto, icone: icone || 'bell', data: new Date().toISOString(), lida: false });
-}
-function toast(msg) {
-  const stack = document.getElementById('toastStack');
-  const el = document.createElement('div');
-  el.className = 'toast';
-  el.innerHTML = `<span class="dot"></span><span>${esc(msg)}</span>`;
-  stack.appendChild(el);
-  setTimeout(() => { el.style.opacity = '0'; el.style.transition = 'opacity .3s'; setTimeout(() => el.remove(), 300); }, 3600);
-}
-
-function normalizeTxt(s) {
-  return (s || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9\s]/g, '');
-}
-function tokenSet(s) {
-  return new Set(normalizeTxt(s).split(/\s+/).filter(w => w.length >= 4 && !STOPWORDS.has(w)));
-}
-function findSimilar(titulo, excludeId) {
-  const base = tokenSet(titulo);
-  if (base.size === 0) return [];
-  const pool = [];
-  DB.ideias.forEach(i => { if (i.id !== excludeId) pool.push({ protocolo: i.protocolo, titulo: i.titulo, statusLabel: ideaResultLabel(i), economia: (i.estimativa && i.estimativa.anual) || 0 }); });
-  DB.historicoImportado.forEach(h => pool.push({ protocolo: h.protocolo, titulo: h.titulo, statusLabel: histLabel(h.status), economia: h.economia }));
-  const scored = pool.map(p => {
-    const t = tokenSet(p.titulo);
-    let inter = 0; base.forEach(w => { if (t.has(w)) inter++; });
-    const union = new Set([...base, ...t]).size;
-    const score = union ? Math.round((inter / union) * 100) : 0;
-    return { ...p, score };
-  }).filter(p => p.score >= 25).sort((a, b) => b.score - a.score);
-  return scored.slice(0, 3);
-}
-function histLabel(s) {
-  return { aprovada_hist: 'Aprovada', implantada_hist: 'Implantada', reprovada_hist: 'Reprovada' }[s] || s;
-}
-function ideaResultLabel(i) {
-  if (i.decisao === 'reprovada') return 'Reprovada';
-  if (i.status === 'concluida') return 'Implantada';
-  if (i.decisao === 'aprovada') return 'Aprovada';
-  return 'Em análise';
-}
-
-function stageIdx(status) { return ALL_STAGES.indexOf(status); }
-
-// ======================================================================
-// CARTAS / PLANOS — criação
-// ======================================================================
-function cartaModelo(idea, reprovacao) {
-  if (reprovacao) {
-    return `Prezado(a) ${idea.colaborador.nome},\n\nAgradecemos sua participação no Programa Sinal Verde.\n\nApós análise realizada pelo Comitê do Programa Sinal Verde e decisão da equipe de Qualidade referente à ideia "${idea.titulo}" (protocolo ${idea.protocolo}), informamos que, neste momento, a proposta não foi aprovada.\n\nMotivo: ${idea.decisaoQualidade ? idea.decisaoQualidade.motivo : '[a definir]'}.\n\nAgradecemos sua contribuição e incentivamos o envio de novas ideias.\n\nEquipe de Qualidade — Programa Sinal Verde.`;
+let campaigns = [
+  {
+    id:"c1", nome:"PPG 2026.1 – Segurança da Informação",
+    descricao:"Avaliação sobre práticas de segurança da informação e proteção de dados corporativos.",
+    objetivo:"Reforçar a cultura de segurança da informação entre todos os colaboradores.",
+    inicio:isoLocal(_inicioC1), fim:isoLocal(_fimC1),
+    qtdGanhadores:4, premio:"Vale-compras R$ 200,00", criterios:"Nenhum critério adicional definido.",
+    status:"andamento", ganhadores:null,
+    questoes:[
+      {texto:"Qual é a prática recomendada ao identificar um e-mail suspeito?", type:"unica", options:[opt("Clicar no link para verificar a origem"),opt("Reportar ao canal de segurança e não interagir com o e-mail",true),opt("Responder pedindo mais informações ao remetente"),opt("Encaminhar para colegas avaliarem")]},
+      {texto:"O que caracteriza uma senha forte?", type:"unica", options:[opt("Data de nascimento e nome do usuário"),opt("Sequência numérica simples, como 123456"),opt("Combinação de letras, números e símbolos, sem dados pessoais",true),opt("A mesma senha usada em vários sistemas")]},
+      {texto:"Dados de clientes podem ser compartilhados sem autorização?", type:"vf", options:[opt("Verdadeiro"),opt("Falso",true)]},
+      {texto:"Qual canal deve ser usado para reportar incidentes de segurança?", type:"unica", options:[opt("Grupo de WhatsApp da equipe"),opt("Canal oficial de segurança da informação",true),opt("Rede social corporativa"),opt("E-mail pessoal do gestor")]}
+    ]
+  },
+  {
+    id:"c2", nome:"PPG 2025.4 – Qualidade e Processos",
+    descricao:"Questionário sobre procedimentos de qualidade, ISO 9001 e melhoria contínua.",
+    objetivo:"Consolidar o entendimento sobre os processos certificados pela ISO 9001.",
+    inicio:"2025-11-01T08:00", fim:"2025-11-20T18:00",
+    qtdGanhadores:4, premio:"Vale-compras R$ 200,00", criterios:"Priorizar setores ainda não contemplados em 2025.",
+    status:"encerrada", ganhadores:null,
+    questoes:[
+      {texto:"O que é uma não conformidade?", type:"unica", options:[opt("Um elogio do cliente"),opt("Um desvio em relação a um requisito estabelecido",true),opt("Uma sugestão de melhoria qualquer"),opt("Um novo processo criado")]},
+      {texto:"Qual a periodicidade da auditoria interna?", type:"unica", options:[opt("Definida no programa de auditoria da empresa",true),opt("Nunca é definida"),opt("Somente quando há reclamação"),opt("A cada 5 anos, sem exceções")]},
+      {texto:"Quais das opções abaixo fazem parte do ciclo PDCA?", type:"multiplas_respostas", options:[opt("Planejar",true),opt("Executar",true),opt("Ignorar os resultados"),opt("Verificar e agir",true)]},
+      {texto:"Quem é responsável por abrir uma RNC (Registro de Não Conformidade)?", type:"unica", options:[opt("Somente a diretoria"),opt("Qualquer colaborador que identificar o desvio",true),opt("Somente auditores externos"),opt("Ninguém, é automático")]}
+    ]
+  },
+  {
+    id:"c3", nome:"PPG 2025.3 – Ética e Compliance",
+    descricao:"Reforço das diretrizes do código de ética e canal de denúncias.",
+    objetivo:"Assegurar o conhecimento do código de ética por todos os colaboradores.",
+    inicio:"2025-08-01T08:00", fim:"2025-08-20T18:00",
+    qtdGanhadores:4, premio:"Vale-compras R$ 150,00", criterios:"Nenhum critério adicional definido.",
+    status:"finalizada",
+    ganhadores:[
+      {nome:"Paulo Dias", matricula:"100004", setor:"Financeiro", filial:"Filial Sul", funcao:"Analista Financeiro"},
+      {nome:"Nelson Dias", matricula:"100017", setor:"Qualidade", filial:"Matriz", funcao:"Analista da Qualidade"},
+      {nome:"Patrícia Dias", matricula:"100023", setor:"Recursos Humanos", filial:"Filial Oeste", funcao:"Assistente de RH"},
+      {nome:"Rodrigo Silva", matricula:"100028", setor:"Manutenção", filial:"Filial Norte", funcao:"Mecânico"}
+    ],
+    randomSeed:"748291063", justificativa:"Distribuição justa alcançada: 4 setores e 3 filiais distintas representadas entre os ganhadores.", responsavel:"Mariana Queiroz",
+    questoes:[
+      {texto:"Qual o canal oficial para registrar uma denúncia?", type:"unica", options:[opt("Comentário em rede social"),opt("Canal de denúncias da Ética e Compliance",true),opt("Conversa informal com colegas"),opt("E-mail pessoal do diretor")]},
+      {texto:"O que é conflito de interesses?", type:"unica", options:[opt("Quando interesses pessoais podem influenciar decisões profissionais",true),opt("Uma discordância entre colegas de equipe"),opt("Um erro de sistema"),opt("Uma reunião com clientes")]},
+      {texto:"Presentes de fornecedores devem ser sempre recusados, independentemente do valor?", type:"vf", options:[opt("Verdadeiro"),opt("Falso — a política define limites de valor e situações permitidas",true)]},
+      {texto:"Quem pode acionar o código de ética da empresa?", type:"unica", options:[opt("Somente gestores"),opt("Qualquer colaborador",true),opt("Somente o setor de Compliance"),opt("Somente fornecedores")]}
+    ]
   }
-  return `Prezado(a) ${idea.colaborador.nome},\n\nAgradecemos sua participação no Programa Sinal Verde.\n\nApós análise realizada pelo Comitê do Programa Sinal Verde, referente à ideia "${idea.titulo}" (protocolo ${idea.protocolo}), temos a satisfação de informar que sua proposta foi APROVADA.\n\nBenefício esperado: ${idea.beneficio}\n\nEm breve nossa equipe entrará em contato para dar início ao Plano de Implantação.\n\nParabéns pela contribuição!\n\nEquipe de Qualidade — Programa Sinal Verde.`;
+];
+
+let participants = [
+  ...buildParticipants("c1", 34, 6),
+  ...buildParticipants("c2", 28, 5),
+  ...buildParticipants("c3", 22, 4),
+];
+
+let wonHistory = [
+  {matricula:"100004", data:new Date(2025,7,21)},
+  {matricula:"100017", data:new Date(2025,7,21)},
+  {matricula:"100023", data:new Date(2025,7,21)},
+  {matricula:"100028", data:new Date(2025,7,21)},
+  {matricula:participants.find(p=>p.campaignId==="c1")?.matricula, data:new Date(2025,2,10)}
+];
+
+/* ======================= BANCO DE PERGUNTAS ======================= */
+let questionBank = [
+  {codigo:"BQ-001", categoria:"Segurança", tema:"Segurança da Informação", procedimento:"POL-SEG-01",
+   texto:"Qual é a prática recomendada ao identificar um e-mail suspeito?", type:"unica",
+   options:[opt("Clicar no link para verificar a origem"),opt("Reportar ao canal de segurança e não interagir com o e-mail",true),opt("Responder pedindo mais informações ao remetente"),opt("Encaminhar para colegas avaliarem")],
+   autor:"Mariana Queiroz", dataCriacao:new Date(2026,4,20), ultimaUtilizacao:new Date(2026,5,15), qtdUtilizacoes:1, status:"ativa"},
+  {codigo:"BQ-002", categoria:"Qualidade", tema:"ISO 9001", procedimento:"POL-QUA-04",
+   texto:"O que é uma não conformidade?", type:"unica",
+   options:[opt("Um elogio do cliente"),opt("Um desvio em relação a um requisito estabelecido",true),opt("Uma sugestão de melhoria qualquer"),opt("Um novo processo criado")],
+   autor:"Mariana Queiroz", dataCriacao:new Date(2025,9,10), ultimaUtilizacao:new Date(2025,10,5), qtdUtilizacoes:2, status:"ativa"},
+  {codigo:"BQ-003", categoria:"Ética", tema:"Compliance", procedimento:"COD-ETI-01",
+   texto:"O que é conflito de interesses?", type:"unica",
+   options:[opt("Quando interesses pessoais podem influenciar decisões profissionais",true),opt("Uma discordância entre colegas de equipe"),opt("Um erro de sistema"),opt("Uma reunião com clientes")],
+   autor:"Mariana Queiroz", dataCriacao:new Date(2025,6,2), ultimaUtilizacao:new Date(2025,7,10), qtdUtilizacoes:1, status:"ativa"},
+  {codigo:"BQ-004", categoria:"Segurança", tema:"Proteção de Dados", procedimento:"POL-SEG-02",
+   texto:"O uso de pen drives pessoais em computadores corporativos é permitido sem autorização?", type:"vf",
+   options:[opt("Verdadeiro"),opt("Falso",true)],
+   autor:"Mariana Queiroz", dataCriacao:new Date(2024,2,1), ultimaUtilizacao:new Date(2024,2,20), qtdUtilizacoes:1, status:"ativa"}
+];
+function bqUsageStatus(q){
+  if(!q.ultimaUtilizacao) return {label:"Nunca utilizada", cls:"nunca"};
+  const twoYearsMs = 2*365*24*60*60*1000;
+  const diff = new Date() - new Date(q.ultimaUtilizacao);
+  if(diff < twoYearsMs){
+    const months = Math.max(1, Math.round(diff/(30*24*60*60*1000)));
+    return {label:`Usada há ${months} mês(es) — considere outra`, cls:"recente"};
+  }
+  return {label:"Livre para reutilização", cls:"livre"};
 }
-function criarCartaParaIdeia(idea, reprovacao) {
-  const carta = {
-    id: uid('C'),
-    ideiaId: idea.id,
-    tipo: reprovacao ? 'reprovacao' : 'aprovacao',
-    versao: 1,
-    status: 'carta_elaboracao',
-    conteudo: cartaModelo(idea, reprovacao),
-    responsavelRedacao: 'Isabella Ramos',
-    comentarios: [],
-    historicoVersoes: [{ versao: 1, evento: 'Rascunho gerado automaticamente pelo sistema.', data: new Date().toISOString() }],
-  };
-  DB.cartas.push(carta);
-  idea.cartaId = carta.id;
-  return carta;
+
+/* ======================= AUDITORIA (log de ações) ======================= */
+let actionLog = [];
+function logAction(acao, detalhe){
+  actionLog.unshift({acao, detalhe: detalhe||"", usuario: currentUser ? currentUser.nome : "Sistema", data:new Date()});
+  const sec = document.getElementById('sec-auditoria');
+  if(sec && sec.classList.contains('active')) renderAuditoria();
+  saveState();
 }
-function criarPlanoParaIdeia(idea, over) {
-  const plano = Object.assign({
-    id: uid('P'),
-    ideiaId: idea.id,
-    titulo: `Plano de Implantação — ${idea.titulo}`,
-    responsavel: 'Isabella Ramos',
-    setor: idea.area,
-    dataInicio: new Date().toISOString().slice(0, 10),
-    prazo: '60 dias',
-    prioridade: idea.prioridade,
-    status: 'planejamento',
-    objetivo: idea.beneficio,
-    acoes: [
-      { id: uid('A'), descricao: 'Levantamento técnico e definição de responsáveis', responsavel: 'Equipe Qualidade', prazo: '10 dias', status: 'concluida' },
-      { id: uid('A'), descricao: 'Execução da ação principal', responsavel: idea.colaborador.nome, prazo: '30 dias', status: 'em_andamento' },
-      { id: uid('A'), descricao: 'Validação dos resultados obtidos', responsavel: 'Equipe Qualidade', prazo: '20 dias', status: 'nao_iniciada' },
-    ],
-    acompanhamentos: [],
-    economia: { prevista: (idea.estimativa && idea.estimativa.anual) || 0, obtida: 0 },
-  }, over || {});
-  DB.planos.push(plano);
-  return plano;
+function renderAuditoria(){
+  const tbody = document.getElementById('tblAuditoria');
+  if(!tbody) return;
+  tbody.innerHTML = actionLog.map(a=>`<tr><td>${fmtDateTime(a.data)}</td><td>${a.usuario}</td><td>${a.acao}</td><td>${a.detalhe}</td></tr>`).join('') ||
+    `<tr><td colspan="4" style="text-align:center; color:var(--ink-soft); padding:20px;">Nenhuma ação registrada ainda nesta sessão.</td></tr>`;
 }
 
+let currentUser = null;
+let currentRole = "qualidade";
+let historyLog = [];
+let editingCampaignId = null;
+let quizState = null;
+let editingBQCodigo = null;
 
-/* ============================================================
-   SINAL VERDE — Estado da aplicação e dados de demonstração
-   Parte do protótipo do Programa Sinal Verde (ver /README.md).
-   ============================================================ */
+/* ======================= PERSISTÊNCIA (localStorage) =======================
+   O app é só HTML/CSS/JS, sem servidor — então "banco de dados" aqui significa
+   salvar automaticamente no navegador de quem está usando. Os dados sobrevivem
+   a um recarregamento de página (F5) ou a fechar e reabrir a aba, permitindo
+   acompanhar o processo ao longo do tempo. Isso é local a cada navegador/
+   computador — não é compartilhado entre pessoas diferentes (para isso seria
+   necessário um backend real). */
+const STORAGE_KEY = "ppg_app_state_v1";
 
-// ======================================================================
-// ESTADO / SESSÃO
-// ======================================================================
-let DB = null;
-const SESSION = { role: null, user: null };
-const UI = { view: null, colabStep: 1, draft: null, qualIdeiasMode: 'table', qualSearch: '', notifOpenFor: null };
-
-// ======================================================================
-// SEED — dados iniciais de demonstração
-// ======================================================================
-function seed() {
-  DB = {
-    protocoloSeq: 184,
-    ideias: [],
-    historicoImportado: [
-      { protocolo: 'SV-2024-0158', titulo: 'Redução de consumo de diesel na frota', categoria: 'custos', status: 'aprovada_hist', economia: 35000 },
-      { protocolo: 'SV-2025-0098', titulo: 'Controle de abastecimento por cartão', categoria: 'custos', status: 'implantada_hist', economia: 18000 },
-      { protocolo: 'SV-2024-00125', titulo: 'Padronização de troca de óleo na manutenção', categoria: 'custos', status: 'aprovada_hist', economia: 28000 },
-      { protocolo: 'SV-2023-00081', titulo: 'Uso de óculos de proteção reforçado na oficina', categoria: 'seguranca', status: 'reprovada_hist', economia: 0 },
-      { protocolo: 'SV-2025-00041', titulo: 'Sinalização de área de risco no pátio', categoria: 'seguranca', status: 'implantada_hist', economia: 42000 },
-      { protocolo: 'SV-2023-00044', titulo: 'Troca de lâmpadas do pátio por LED', categoria: 'custos', status: 'reprovada_hist', economia: 0 },
-    ],
-    reunioes: [
-      { id: 'R1', codigo: 'COM-2026-014', data: '2026-08-10', hora: '09:00', local: 'Sala de Reuniões 2', participantes: ['Rafael Nunes', 'Fernanda Dias', 'Carlos Prado'], pauta: [], ata: null, status: 'agendada' },
-      { id: 'R2', codigo: 'COM-2026-013', data: '2026-07-28', hora: '14:00', local: 'Sala de Reuniões 1', participantes: ['Rafael Nunes', 'Fernanda Dias'], pauta: [], ata: 'Reunião realizada conforme pauta. Todos os pareceres registrados no sistema.', status: 'realizada' },
-    ],
-    cartas: [],
-    planos: [],
-    notificacoes: [],
-    auditoria: [],
-  };
-
-  const mk = (over) => {
-    const base = {
-      id: uid('I'),
-      protocolo: nextProtocolo(),
-      colaborador: { nome: 'Marina Costa', matricula: '10234', funcao: 'Motorista', setor: 'Operação', unidade: 'Unidade Matriz', telefone: '(11) 98888-1234', email: 'marina.costa@empresa.com' },
-      area: 'Operação',
-      categoria: 'custos',
-      descricao: 'Descrição detalhada da ideia proposta pelo colaborador, explicando o problema atual e a melhoria sugerida.',
-      beneficio: 'Redução de custos operacionais e padronização do processo.',
-      estimativa: { mensal: 0, anual: 0 },
-      investimento: 'Até R$2.000',
-      tempoImplantacao: 'Até 30 dias',
-      anexos: [],
-      prioridade: 'normal',
-      dataCriacao: new Date().toISOString(),
-      historico: [],
-      parecerComite: null,
-      decisaoQualidade: null,
-      decisao: null,
-      cartaId: null,
-      planoId: null,
-      status: 'enviada',
+function dateReviver(key, value){
+  if(typeof value === "string" && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/.test(value)) return new Date(value);
+  return value;
+}
+function saveState(){
+  try{
+    const state = {
+      campaigns, participants, wonHistory, questionBank, actionLog,
+      currentUser, currentRole,
+      darkMode: document.body.classList.contains('dark'),
+      savedAt: new Date()
     };
-    const idea = Object.assign(base, over);
-    idea.historico.push({ data: idea.dataCriacao, evento: `${idea.colaborador.nome} criou a ideia.` });
-    return idea;
-  };
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+  }catch(e){ console.warn("Não foi possível salvar os dados localmente:", e); }
+}
+function loadState(){
+  try{
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if(!raw) return false;
+    const state = JSON.parse(raw, dateReviver);
+    if(state.campaigns) campaigns = state.campaigns;
+    if(state.participants) participants = state.participants;
+    if(state.wonHistory) wonHistory = state.wonHistory;
+    if(state.questionBank) questionBank = state.questionBank;
+    if(state.actionLog) actionLog = state.actionLog;
+    currentUser = state.currentUser || null;
+    currentRole = state.currentRole || "qualidade";
+    if(state.darkMode) document.body.classList.add('dark');
+    return true;
+  }catch(e){ console.warn("Não foi possível carregar os dados salvos:", e); return false; }
+}
+function clearSavedState(){ try{ localStorage.removeItem(STORAGE_KEY); }catch(e){} }
 
-  // ---- Ideia 1: recém enviada ----
-  DB.ideias.push(mk({
-    titulo: 'Redução de consumo de diesel com monitoramento de rotas',
-    categoria: 'custos', area: 'Logística',
-    estimativa: { mensal: 3200, anual: 38400 },
-    descricao: 'Implantar monitoramento de rotas via GPS para identificar desvios de trajeto e reduzir consumo de diesel da frota de entrega, com relatórios semanais de desempenho por motorista.',
-    beneficio: 'Redução estimada de 12% no consumo mensal de diesel.',
-    status: 'enviada', prioridade: 'alta',
-  }));
-
-  // ---- Ideia 2: recebida pela Qualidade ----
-  DB.ideias.push(mk({
-    titulo: 'Padronização de check-list de segurança na oficina',
-    categoria: 'seguranca', area: 'Segurança do Trabalho',
-    colaborador: { nome: 'João Silva', matricula: '10891', funcao: 'Mecânico', setor: 'Oficina', unidade: 'Unidade Matriz', telefone: '(11) 97777-4321', email: 'joao.silva@empresa.com' },
-    descricao: 'Criar check-list obrigatório de EPIs e condições de segurança antes de iniciar qualquer manutenção em equipamentos pesados, reduzindo o risco de acidentes.',
-    beneficio: 'Redução do número de quase-acidentes registrados na oficina.',
-    status: 'recebida', prioridade: 'critica',
-  }));
-
-  // ---- Ideia 3: aguardando reunião ----
-  DB.ideias.push(mk({
-    titulo: 'Reaproveitamento de peças recondicionadas na manutenção',
-    categoria: 'custos', area: 'Manutenção',
-    colaborador: { nome: 'Carlos Prado', matricula: '11290', funcao: 'Técnico de Manutenção', setor: 'Manutenção', unidade: 'Unidade Matriz', telefone: '(11) 96666-1111', email: 'carlos.prado@empresa.com' },
-    estimativa: { mensal: 1500, anual: 18000 },
-    descricao: 'Estabelecer processo formal de recondicionamento de peças ainda aproveitáveis antes de comprar novas, com avaliação técnica de viabilidade.',
-    beneficio: 'Redução de gastos com peças novas.',
-    status: 'aguardando_reuniao', prioridade: 'normal',
-  }));
-
-  // ---- Ideia 4: em análise pelo Comitê (na fila de pareceres) ----
-  DB.ideias.push(mk({
-    titulo: 'Instalação de sinalização fotoluminescente nas rotas de fuga',
-    categoria: 'seguranca', area: 'Segurança do Trabalho',
-    colaborador: { nome: 'Fernanda Dias', matricula: '10555', funcao: 'Técnica de Segurança', setor: 'Administrativo', unidade: 'Unidade Matriz', telefone: '(11) 95555-2222', email: 'fernanda.dias@empresa.com' },
-    descricao: 'Substituir a sinalização atual das rotas de fuga por placas fotoluminescentes, garantindo visibilidade mesmo em caso de queda de energia.',
-    beneficio: 'Melhoria na segurança em situações de emergência.',
-    status: 'em_analise_comite', prioridade: 'alta',
-    reuniaoId: 'R1',
-  }));
-
-  // ---- Ideia 5: aguardando decisão da Qualidade (parecer favorável) ----
-  DB.ideias.push(mk({
-    titulo: 'Controle digital de abastecimento por cartão magnético',
-    categoria: 'custos', area: 'Logística',
-    colaborador: { nome: 'Marina Costa', matricula: '10234', funcao: 'Motorista', setor: 'Operação', unidade: 'Unidade Matriz', telefone: '(11) 98888-1234', email: 'marina.costa@empresa.com' },
-    estimativa: { mensal: 2100, anual: 25200 },
-    descricao: 'Substituir o controle manual de abastecimento por cartões magnéticos vinculados a cada veículo, eliminando divergências e desvios.',
-    beneficio: 'Maior controle e rastreabilidade do consumo de combustível.',
-    status: 'aguardando_decisao', prioridade: 'alta',
-    parecerComite: { resultado: 'favoravel', justificativa: 'Ideia tecnicamente viável, com baixo investimento e retorno rápido. O Comitê recomenda aprovação, pois soluções semelhantes já mostraram resultado positivo em outras unidades.', riscos: 'Necessário treinamento da equipe operacional.', data: '2026-07-20T15:00:00', participantes: ['Rafael Nunes', 'Fernanda Dias', 'Carlos Prado'] },
-  }));
-
-  // ---- Ideia 6: carta em elaboração (aprovada) ----
-  const idea6 = mk({
-    titulo: 'Reutilização de água de lavagem de veículos',
-    categoria: 'custos', area: 'Manutenção',
-    colaborador: { nome: 'Paulo Menezes', matricula: '10777', funcao: 'Lavador', setor: 'Manutenção', unidade: 'Unidade Matriz', telefone: '(11) 94444-3333', email: 'paulo.menezes@empresa.com' },
-    estimativa: { mensal: 900, anual: 10800 },
-    descricao: 'Instalar sistema de captação e reuso da água utilizada na lavagem de veículos para reduzir o consumo de água tratada.',
-    beneficio: 'Redução no consumo de água e no custo da conta mensal.',
-    status: 'carta_elaboracao', prioridade: 'normal', decisao: 'aprovada',
-    parecerComite: { resultado: 'favoravel', justificativa: 'Solução simples, de baixo custo e com impacto ambiental positivo. Comitê recomenda aprovação.', riscos: 'Nenhum risco relevante identificado.', data: '2026-07-15T10:00:00', participantes: ['Rafael Nunes', 'Fernanda Dias'] },
-    decisaoQualidade: { resultado: 'aprovada', justificativa: 'Ideia aprovada por unanimidade. Baixo investimento e retorno ambiental relevante.', motivo: 'Viabilidade técnica e financeira', data: '2026-07-16T11:00:00' },
+/* ======================= ELEGIBILIDADE ======================= */
+function isWithinTwoYears(matricula, refDate){
+  const twoYearsMs = 2*365*24*60*60*1000;
+  return wonHistory.some(w => w.matricula === matricula && (refDate - w.data) < twoYearsMs);
+}
+function evaluateEligibility(campaignId){
+  const all = campaignParticipants(campaignId).filter(p=>p.pct===100);
+  const eligible = [], excluded = [];
+  const now = new Date();
+  all.forEach(p=>{
+    if(CARGOS_IMPEDIDOS.includes(p.cargo)) excluded.push({...p, motivo:`Cargo impedido (${p.cargo})`});
+    else if(isWithinTwoYears(p.matricula, now)) excluded.push({...p, motivo:"Premiado(a) em campanha do PPG nos últimos 2 anos"});
+    else eligible.push(p);
   });
-  DB.ideias.push(idea6);
-  const carta6 = criarCartaParaIdeia(idea6, false);
-  carta6.status = 'carta_elaboracao';
-
-  // ---- Ideia 7: carta em aprovação (Analista) ----
-  const idea7 = mk({
-    titulo: 'Treinamento de direção econômica para motoristas',
-    categoria: 'custos', area: 'Operação',
-    colaborador: { nome: 'Marina Costa', matricula: '10234', funcao: 'Motorista', setor: 'Operação', unidade: 'Unidade Matriz', telefone: '(11) 98888-1234', email: 'marina.costa@empresa.com' },
-    estimativa: { mensal: 2800, anual: 33600 },
-    descricao: 'Realizar treinamento periódico de direção econômica para reduzir consumo de combustível e desgaste de peças.',
-    beneficio: 'Redução no consumo de combustível e manutenção da frota.',
-    status: 'carta_analista', prioridade: 'alta', decisao: 'aprovada',
-    parecerComite: { resultado: 'favoravel', justificativa: 'Ação de baixo custo com retorno recorrente. Comitê recomenda aprovação imediata.', riscos: 'Necessário acompanhar adesão dos motoristas.', data: '2026-07-10T09:30:00', participantes: ['Rafael Nunes', 'Carlos Prado'] },
-    decisaoQualidade: { resultado: 'aprovada', justificativa: 'Aprovada. Iniciativa alinhada às metas de redução de custos do ano.', motivo: 'Viabilidade técnica e financeira', data: '2026-07-11T09:00:00' },
-  });
-  DB.ideias.push(idea7);
-  const carta7 = criarCartaParaIdeia(idea7, false);
-  carta7.status = 'carta_analista';
-  carta7.historicoVersoes.push({ versao: 1, evento: 'Carta enviada para a Analista.', data: '2026-07-12T09:00:00' });
-
-  // ---- Ideia 8: implantação em andamento ----
-  const idea8 = mk({
-    titulo: 'Redução de consumo de diesel (piloto 2026)',
-    categoria: 'custos', area: 'Logística',
-    colaborador: { nome: 'Ricardo Nogueira', matricula: '10456', funcao: 'Supervisor de Frota', setor: 'Logística', unidade: 'Unidade Matriz', telefone: '(11) 93333-7777', email: 'ricardo.nogueira@empresa.com' },
-    estimativa: { mensal: 3300, anual: 39600 },
-    descricao: 'Piloto de redução de consumo de diesel com monitoramento eletrônico da frota e metas por motorista.',
-    beneficio: 'Redução direta de custo com combustível.',
-    status: 'implantacao', prioridade: 'alta', decisao: 'aprovada',
-    parecerComite: { resultado: 'favoravel', justificativa: 'Projeto piloto já validado tecnicamente. Comitê recomenda aprovação e expansão gradual.', riscos: 'Curva de adaptação da equipe.', data: '2026-05-20T10:00:00', participantes: ['Rafael Nunes', 'Fernanda Dias', 'Carlos Prado'] },
-    decisaoQualidade: { resultado: 'aprovada', justificativa: 'Aprovada para execução em caráter piloto.', motivo: 'Alto potencial de economia', data: '2026-05-22T09:00:00' },
-  });
-  DB.ideias.push(idea8);
-  const carta8 = criarCartaParaIdeia(idea8, false);
-  carta8.status = 'carta_enviada'; carta8.versao = 4;
-  idea8.planoId = criarPlanoParaIdeia(idea8, { status: 'execucao' }).id;
-
-  // ---- Ideia 9: concluída (histórico) — vencedora da premiação anual ----
-  const idea9 = mk({
-    titulo: 'Padronização de troca de óleo na manutenção preventiva',
-    categoria: 'custos', area: 'Manutenção',
-    colaborador: { nome: 'Marina Costa', matricula: '10234', funcao: 'Motorista', unidade: 'Unidade Matriz', setor: 'Operação', telefone: '(11) 98888-1234', email: 'marina.costa@empresa.com' },
-    estimativa: { mensal: 2300, anual: 27600 },
-    descricao: 'Padronizar intervalos e procedimento de troca de óleo, reduzindo desperdício de lubrificante e retrabalho.',
-    beneficio: 'Redução de custo com lubrificantes e menor desgaste de motores.',
-    status: 'concluida', prioridade: 'normal', decisao: 'aprovada', premiacaoAnual: true, anoPremiacao: 2025,
-    parecerComite: { resultado: 'favoravel', justificativa: 'Padronização simples com ganho operacional relevante. Comitê recomenda aprovação.', riscos: 'Nenhum.', data: '2026-03-05T10:00:00', participantes: ['Rafael Nunes', 'Carlos Prado'] },
-    decisaoQualidade: { resultado: 'aprovada', justificativa: 'Aprovada. Processo já em uso em outra unidade com sucesso.', motivo: 'Viabilidade técnica comprovada', data: '2026-03-06T09:00:00' },
-  });
-  DB.ideias.push(idea9);
-  const carta9 = criarCartaParaIdeia(idea9, false); carta9.status = 'carta_enviada'; carta9.versao = 3;
-  const plano9 = criarPlanoParaIdeia(idea9, { status: 'concluido' });
-  plano9.economia.obtida = 26200;
-  idea9.planoId = plano9.id;
-
-  // ---- Ideia 10: reprovada e encerrada ----
-  const idea10 = mk({
-    titulo: 'Troca de todas as lâmpadas do pátio por modelo importado',
-    categoria: 'custos', area: 'Administrativo',
-    colaborador: { nome: 'Ana Beatriz', matricula: '10999', funcao: 'Assistente Administrativo', setor: 'Administrativo', unidade: 'Unidade Matriz', telefone: '(11) 92222-8888', email: 'ana.beatriz@empresa.com' },
-    estimativa: { mensal: 100, anual: 1200 },
-    descricao: 'Trocar todas as lâmpadas do pátio por um modelo importado de alto custo, com retorno financeiro baixo comparado ao investimento necessário.',
-    beneficio: 'Melhoria estética da iluminação.',
-    status: 'concluida', prioridade: 'baixa', decisao: 'reprovada',
-    parecerComite: { resultado: 'desfavoravel', justificativa: 'Investimento elevado sem retorno financeiro proporcional. Existem alternativas nacionais com custo muito menor e desempenho equivalente.', riscos: 'Alto custo de importação e manutenção.', data: '2026-06-01T10:00:00', participantes: ['Rafael Nunes', 'Fernanda Dias'] },
-    decisaoQualidade: { resultado: 'reprovada', justificativa: 'Reprovada. Relação custo-benefício desfavorável frente a alternativas nacionais já avaliadas.', motivo: 'Baixa viabilidade financeira', data: '2026-06-02T09:00:00' },
-  });
-  DB.ideias.push(idea10);
-  const carta10 = criarCartaParaIdeia(idea10, true); carta10.status = 'carta_enviada'; carta10.versao = 2;
-
-  // Notificações iniciais
-  addNotif('qualidade', 'Nova ideia recebida: "Redução de consumo de diesel com monitoramento de rotas".', 'inbox');
-  addNotif('qualidade', '3 ideias aguardando decisão oficial.', 'alert-triangle');
-  addNotif('comite', 'Reunião COM-2026-014 agendada para 10/08.', 'calendar');
-  addNotif('comite', '1 ideia entrou na pauta da próxima reunião.', 'list-plus');
-  addNotif('colaborador', 'Sua ideia SV-2026-000009 está em acompanhamento após a implantação.', 'rocket');
-  addNotif('analista', '1 carta aguardando sua revisão.', 'mail-check');
-  addNotif('gerente', 'Indicadores de cartas atualizados.', 'bar-chart-3');
-  addNotif('diretoria', '1 carta aguardando aprovação institucional.', 'briefcase');
-
-  addAudit('sistema', 'Sistema Sinal Verde inicializado com dados de demonstração.');
+  return {eligible, excluded};
 }
 
-
-/* ============================================================
-   SINAL VERDE — Autenticação, navegação, modais e drawers
-   Parte do protótipo do Programa Sinal Verde (ver /README.md).
-   ============================================================ */
-
-// ======================================================================
-// AUTENTICAÇÃO
-// ======================================================================
-const TEAM_ROLES = [
-  { role: 'comite', icon: 'users', label: 'Comitê', sub: 'Parecer técnico das ideias', user: { nome: 'Rafael Nunes', cargo: 'Membro do Comitê' } },
-  { role: 'qualidade', icon: 'shield-check', label: 'Qualidade', sub: 'Administração do Programa', user: { nome: 'Isabella Ramos', cargo: 'Analista de Qualidade Sênior' } },
-  { role: 'analista', icon: 'file-check-2', label: 'Analista da Qualidade', sub: '1ª aprovação das cartas', user: { nome: 'Camila Alves', cargo: 'Analista da Qualidade' } },
-  { role: 'gerente', icon: 'briefcase', label: 'Gerente da Qualidade', sub: '2ª aprovação das cartas', user: { nome: 'Eduardo Lima', cargo: 'Gerente da Qualidade' } },
-  { role: 'diretoria', icon: 'landmark', label: 'Diretoria', sub: 'Aprovação institucional', user: { nome: 'Roberto Cardoso', cargo: 'Diretor de Operações' } },
-];
-
-function renderTeamRoleList() {
-  const el = document.getElementById('teamRoleList');
-  el.innerHTML = TEAM_ROLES.map(r => `
-    <button class="role-btn" onclick="loginTeam('${r.role}')">
-      <span class="ic">${icon(r.icon)}</span>
-      <span>
-        <div class="lbl">${r.label}</div>
-        <div class="sub">${r.sub}</div>
-      </span>
-    </button>`).join('');
+/* ======================= ACESSO POR DATA ======================= */
+function campaignAccessStatus(c){
+  const now = new Date();
+  const start = new Date(c.inicio), end = new Date(c.fim);
+  if(now < start) return 'nao_iniciada';
+  if(now > end) return 'encerrada';
+  return 'aberta';
 }
 
-function switchLoginTab(tab) {
-  document.getElementById('loginTabColab').classList.toggle('hidden', tab !== 'colab');
-  document.getElementById('loginTabTeam').classList.toggle('hidden', tab !== 'team');
-  document.getElementById('loginFootAdmin').classList.toggle('hidden', tab === 'team');
-  const title = document.getElementById('loginTitle');
-  const sub = document.getElementById('loginSub');
-  if (tab === 'team') {
-    title.textContent = 'Acesso da equipe interna';
-    sub.textContent = 'Escolha seu perfil para continuar.';
+/* ======================= NAV ======================= */
+const titles = {
+  inicio:"Início", campanhas:"Rodadas", nova:"Nova Campanha", participantes:"Resultados",
+  elegiveis:"Elegíveis", sorteio:"Sorteio", relatorios:"Relatórios", historico:"Histórico",
+  banco:"Banco de Perguntas", auditoria:"Auditoria", config:"Configurações", responder:"Questionário",
+  "campanha-atual":"Campanha Atual", "historico-colab":"Histórico", "meu-resultado":"Meu Resultado", regulamento:"Regulamento"
+};
+
+document.querySelectorAll('.menu-item').forEach(btn=>{
+  btn.addEventListener('click', ()=>{
+    const target = btn.dataset.target;
+    document.querySelectorAll('.menu-item').forEach(b=>b.classList.remove('active'));
+    btn.classList.add('active');
+    goToSection(target);
+  });
+});
+document.querySelectorAll('.menu-group-header').forEach(btn=>{
+  btn.addEventListener('click', ()=>{
+    btn.closest('.menu-group').classList.toggle('expanded');
+  });
+});
+function goToSection(target){
+  document.querySelectorAll('.section').forEach(s=>s.classList.remove('active'));
+  const sec = document.getElementById('sec-'+target);
+  if(sec) sec.classList.add('active');
+  document.getElementById('pageTitle').textContent = titles[target] || target;
+  closeSidebarMobile();
+  if(target==="inicio") renderDashboard();
+  if(target==="campanhas") renderCampaignGrid();
+  if(target==="historico") renderTimeline();
+  if(target==="participantes") renderParticipantsTable();
+  if(target==="elegiveis") renderEligibleTable();
+  if(target==="banco") renderBanco();
+  if(target==="auditoria") renderAuditoria();
+  if(target==="campanha-atual") renderCampanhaAtual();
+  if(target==="historico-colab") renderHistoricoColaborador();
+  if(target==="meu-resultado") renderMeuResultado();
+  if(target==="regulamento") renderRegulamentoStats();
+}
+
+document.getElementById('hamburger').addEventListener('click', ()=>{
+  document.getElementById('sidebar').classList.toggle('open');
+  document.getElementById('overlay').classList.toggle('open');
+});
+document.getElementById('overlay').addEventListener('click', closeSidebarMobile);
+function closeSidebarMobile(){ document.getElementById('sidebar').classList.remove('open'); document.getElementById('overlay').classList.remove('open'); }
+
+const btnResetDemoData = document.getElementById('btnResetDemoData');
+if(btnResetDemoData){
+  btnResetDemoData.addEventListener('click', ()=>{
+    if(confirm("Isso vai apagar todos os dados salvos neste navegador (campanhas, respostas, banco de perguntas) e voltar ao estado inicial de demonstração. Continuar?")){
+      clearSavedState();
+      window.location.reload();
+    }
+  });
+}
+
+/* Menu lateral recolhível (ícone-somente) */
+const btnCollapseSidebar = document.getElementById('btnCollapseSidebar');
+if(btnCollapseSidebar){
+  btnCollapseSidebar.addEventListener('click', ()=>{
+    document.getElementById('sidebar').classList.toggle('collapsed');
+  });
+}
+// Em telas de tablet, começa recolhido automaticamente (mais espaço de conteúdo)
+if(window.innerWidth <= 1180 && window.innerWidth > 880){
+  document.getElementById('sidebar').classList.add('collapsed');
+}
+
+/* Link/QR de divulgação: ?campanha=ID leva direto ao questionário após o login */
+const urlParams = new URLSearchParams(window.location.search);
+const deepLinkCampaignId = urlParams.get('campanha');
+
+/* ======================= LOGIN ======================= */
+// Cada usuário de demonstração tem sua própria senha. O perfil do colaborador
+// já nasce coerente com a hierarquia Setor → Função da EMPRESA_CONFIG.
+const USERS = {
+  // ---- Qualidade (administrador) ----
+  "1000": { senha:"qualidade2026", nome:"Mariana Queiroz", role:"qualidade" },
+  "1001": { senha:"qualidade2026", nome:"Fernando Ribeiro", role:"qualidade" },
+  "1002": { senha:"qualidade2026", nome:"Juliana Prado", role:"qualidade" },
+
+  // ---- Colaborador — perfis variados para amostragem/testes em diferentes telas ----
+  "2000": { senha:"colab2026", nome:"Carlos Bento", role:"colaborador",
+            setor:"Qualidade", filial:"Matriz", funcao:"Analista da Qualidade", cargo:"Analista da Qualidade" },
+  "100110": { senha:"colab2026", nome:"Camila Ramos", role:"colaborador",
+            setor:"Tecnologia da Informação", filial:"Filial Oeste", funcao:"Analista de TI", cargo:"Analista de TI" },
+  "100028": { senha:"colab2026", nome:"Rodrigo Silva", role:"colaborador",
+            setor:"Manutenção", filial:"Filial Norte", funcao:"Mecânico", cargo:"Mecânico" },
+  "100171": { senha:"colab2026", nome:"Thiago Barbosa", role:"colaborador",
+            setor:"Operações", filial:"Filial Norte", funcao:"Motorista Instrutor", cargo:"Motorista Instrutor" },
+  "100004": { senha:"colab2026", nome:"Paulo Dias", role:"colaborador",
+            setor:"Financeiro", filial:"Filial Sul", funcao:"Analista Financeiro", cargo:"Analista Financeiro" },
+  "100023": { senha:"colab2026", nome:"Patrícia Dias", role:"colaborador",
+            setor:"Recursos Humanos", filial:"Filial Oeste", funcao:"Assistente de RH", cargo:"Assistente de RH" }
+};
+document.getElementById('loginForm').addEventListener('submit', function(e){
+  e.preventDefault();
+  const mat = document.getElementById('loginMatricula').value.trim();
+  const senha = document.getElementById('loginSenha').value;
+  const errEl = document.getElementById('loginError');
+  const user = USERS[mat];
+  if(user && senha === user.senha){
+    currentUser = {matricula: mat, nome:user.nome, role:user.role, setor:user.setor, filial:user.filial, funcao:user.funcao, cargo:user.cargo};
+  } else { errEl.style.display = "block"; return; }
+  errEl.style.display = "none";
+  document.getElementById('loginScreen').style.display = "none";
+  document.getElementById('appRoot').style.display = "flex";
+  applyRole(currentUser.role);
+  saveState();
+  showToast(`Bem-vindo(a), ${currentUser.nome}.`, "success");
+});
+document.getElementById('btnLogout').addEventListener('click', ()=>{
+  currentUser = null;
+  saveState();
+  document.getElementById('appRoot').style.display = "none";
+  document.getElementById('loginScreen').style.display = "flex";
+  document.getElementById('loginForm').reset();
+});
+function applyRole(role){
+  currentRole = role;
+  const isAdmin = role === "qualidade";
+  document.body.classList.toggle('role-colaborador', !isAdmin);
+  document.getElementById('userName').textContent = currentUser.nome;
+  document.getElementById('userRole').textContent = isAdmin ? "Qualidade · Administrador" : `Colaborador · ${currentUser.funcao || ''}`;
+  const initials = currentUser.nome.split(' ').filter(Boolean).slice(0,2).map(n=>n[0]).join('').toUpperCase();
+  document.getElementById('avatarInit').textContent = initials;
+  document.getElementById('configSubtitle').textContent = isAdmin ? "Preferências pessoais e parâmetros gerais do sistema." : "Preferências pessoais.";
+  logAction(isAdmin ? "Login (Qualidade)" : "Login (Colaborador)", `${currentUser.nome} autenticado(a) no sistema.`);
+  if(window.lucide) lucide.createIcons();
+  const defaultTarget = isAdmin ? "inicio" : "campanha-atual";
+  document.querySelectorAll('.menu-item').forEach(b=>b.classList.remove('active'));
+  const btn = document.querySelector(`[data-target="${defaultTarget}"]`);
+  if(btn) btn.classList.add('active');
+  if(!isAdmin && deepLinkCampaignId && campaigns.find(c=>c.id===deepLinkCampaignId)){
+    goToSection(defaultTarget);
+    openQuiz(deepLinkCampaignId);
   } else {
-    title.textContent = 'Bem-vindo de volta';
-    sub.textContent = 'Acesse com sua matrícula e senha.';
+    goToSection(defaultTarget);
   }
-  lucide.createIcons();
 }
 
-function togglePasswordField(inputId, btnEl) {
-  const input = document.getElementById(inputId);
-  const showing = input.type === 'text';
-  input.type = showing ? 'password' : 'text';
-  btnEl.innerHTML = showing ? icon('eye') : icon('eye-off');
-  lucide.createIcons();
+/* ======================= TEMA ======================= */
+function setDarkMode(on){ document.body.classList.toggle('dark', on); document.getElementById('themeToggle').checked = on; saveState(); }
+document.getElementById('themeToggle').addEventListener('change', (e)=> setDarkMode(e.target.checked));
+document.getElementById('themeToggleTop').addEventListener('click', ()=> setDarkMode(!document.body.classList.contains('dark')));
+
+/* ======================= TOAST ======================= */
+function showToast(msg, type=""){
+  const t = document.getElementById('toast');
+  t.textContent = msg; t.className = "toast show " + type;
+  clearTimeout(window._toastTimer);
+  window._toastTimer = setTimeout(()=> t.className = "toast " + type, 2800);
 }
 
-function loginColaborador() {
-  SESSION.role = 'colaborador';
-  SESSION.user = DB.ideias[0].colaborador; // Marina Costa — usuária de demonstração
-  enterApp();
+/* ======================= HELPERS ======================= */
+function statusBadge(status){
+  const map = {programada:["programada","Programada"], andamento:["andamento","Em andamento"], encerrada:["encerrada","Encerrada"], finalizada:["finalizada","Finalizada"]};
+  const [cls,label] = map[status];
+  return `<span class="badge ${cls}">${label}</span>`;
 }
-function loginTeam(role) {
-  const r = TEAM_ROLES.find(x => x.role === role);
-  SESSION.role = role;
-  SESSION.user = r.user;
-  enterApp();
-}
-function logout() {
-  SESSION.role = null; SESSION.user = null;
-  document.getElementById('appShell').classList.remove('active');
-  document.getElementById('loginScreen').style.display = 'flex';
-}
-
-function enterApp() {
-  document.getElementById('loginScreen').style.display = 'none';
-  document.getElementById('appShell').classList.add('active');
-  buildSidebar();
-  const home = { colaborador: 'home', comite: 'dashboard', qualidade: 'dashboard', analista: 'cartas', gerente: 'cartas', diretoria: 'dashboard' }[SESSION.role];
-  navigateTo(home);
-}
-
-// ======================================================================
-// NAVEGAÇÃO / SIDEBAR
-// ======================================================================
-const NAV = {
-  colaborador: [
-    { id: 'home', label: 'Início', icon: 'layout-dashboard' },
-    { id: 'nova-ideia', label: 'Nova Ideia', icon: 'lightbulb' },
-    { id: 'minhas-ideias', label: 'Minhas Ideias', icon: 'list-checks' },
-    { id: 'conquistas', label: 'Conquistas', icon: 'award' },
-    { id: 'notificacoes', label: 'Notificações', icon: 'bell' },
-    { id: 'perfil', label: 'Meu Perfil', icon: 'user' },
-  ],
-  comite: [
-    { id: 'dashboard', label: 'Dashboard', icon: 'layout-dashboard' },
-    { id: 'fila', label: 'Fila de Pareceres', icon: 'list-checks' },
-    { id: 'reunioes', label: 'Reuniões', icon: 'calendar' },
-    { id: 'implantacoes', label: 'Implantações', icon: 'rocket' },
-    { id: 'historico', label: 'Histórico', icon: 'history' },
-    { id: 'perfil', label: 'Meu Perfil', icon: 'user' },
-  ],
-  qualidade: [
-    { id: 'dashboard', label: 'Dashboard', icon: 'layout-dashboard' },
-    { id: 'ideias', label: 'Ideias', icon: 'list-checks' },
-    { id: 'comite', label: 'Comitê', icon: 'users' },
-    { id: 'cartas', label: 'Cartas', icon: 'mail' },
-    { id: 'implantacoes', label: 'Implantações', icon: 'rocket' },
-    { id: 'indicadores', label: 'Indicadores', icon: 'bar-chart-3' },
-    { id: 'usuarios', label: 'Usuários', icon: 'user-cog' },
-    { id: 'auditoria', label: 'Auditoria', icon: 'shield-check' },
-    { id: 'config', label: 'Configurações', icon: 'settings' },
-  ],
-  analista: [
-    { id: 'cartas', label: 'Cartas para Aprovação', icon: 'mail-check' },
-    { id: 'perfil', label: 'Meu Perfil', icon: 'user' },
-  ],
-  gerente: [
-    { id: 'cartas', label: 'Cartas para Aprovação', icon: 'mail-check' },
-    { id: 'indicadores', label: 'Indicadores', icon: 'bar-chart-3' },
-    { id: 'perfil', label: 'Meu Perfil', icon: 'user' },
-  ],
-  diretoria: [
-    { id: 'dashboard', label: 'Dashboard Estratégico', icon: 'layout-dashboard' },
-    { id: 'cartas', label: 'Cartas para Aprovação', icon: 'mail-check' },
-    { id: 'perfil', label: 'Meu Perfil', icon: 'user' },
-  ],
-};
-const PORTAL_LABEL = { colaborador: 'Portal do Colaborador', comite: 'Portal do Comitê', qualidade: 'Portal da Qualidade', analista: 'Aprovação de Cartas', gerente: 'Aprovação de Cartas', diretoria: 'Diretoria' };
-
-function buildSidebar() {
-  document.getElementById('sidebarPortalLabel').textContent = PORTAL_LABEL[SESSION.role];
-  const nav = NAV[SESSION.role];
-  document.getElementById('sidebarNav').innerHTML = nav.map(n => `
-    <button class="nav-item" data-nav="${n.id}" onclick="navigateTo('${n.id}')">${icon(n.icon)}<span>${n.label}</span></button>
-  `).join('');
-  const initials = SESSION.user.nome.split(' ').map(p => p[0]).slice(0, 2).join('').toUpperCase();
-  document.getElementById('userChip').innerHTML = `
-    <div class="avatar">${initials}</div>
-    <div><div class="name">${esc(SESSION.user.nome)}</div><div class="role">${esc(SESSION.user.cargo || SESSION.user.funcao || PORTAL_LABEL[SESSION.role])}</div></div>`;
-  lucide.createIcons();
-}
-
-const VIEW_META = {
-  'home': ['Início', 'Bem-vinda de volta! Aqui está o resumo das suas ideias.'],
-  'nova-ideia': ['Nova Ideia', 'Leva menos de 5 minutos — preencha as etapas abaixo.'],
-  'minhas-ideias': ['Minhas Ideias', 'Acompanhe o andamento de tudo o que você enviou.'],
-  'conquistas': ['Conquistas', 'Seus selos por ideias aprovadas e premiações.'],
-  'notificacoes': ['Notificações', 'Avisos sobre suas ideias e o Programa Sinal Verde.'],
-  'perfil': ['Meu Perfil', 'Seus dados de acesso.'],
-  'dashboard': ['Dashboard', 'Visão geral do Programa Sinal Verde.'],
-  'fila': ['Fila de Pareceres', 'Ideias aguardando análise técnica do Comitê.'],
-  'reunioes': ['Reuniões', 'Agenda e atas do Comitê.'],
-  'implantacoes': ['Implantações', 'Acompanhamento das melhorias aprovadas.'],
-  'historico': ['Histórico', 'Consulta completa de reuniões e pareceres.'],
-  'ideias': ['Ideias', 'Fila completa do Programa Sinal Verde.'],
-  'comite': ['Comitê', 'Agenda de reuniões e pareceres.'],
-  'cartas': ['Cartas', 'Elaboração, revisão e envio das cartas oficiais.'],
-  'indicadores': ['Indicadores', 'Business Intelligence do Programa Sinal Verde.'],
-  'usuarios': ['Usuários', 'Gestão de colaboradores e perfis de acesso.'],
-  'auditoria': ['Auditoria', 'Log completo e imutável de ações no sistema.'],
-  'config': ['Configurações', 'Parâmetros do Programa Sinal Verde.'],
-};
-
-function navigateTo(viewId) {
-  UI.view = viewId;
-  document.querySelectorAll('.nav-item').forEach(b => b.classList.toggle('active', b.dataset.nav === viewId));
-  const meta = VIEW_META[viewId] || ['', ''];
-  document.getElementById('viewTitle').textContent = meta[0];
-  document.getElementById('viewSub').textContent = meta[1];
-  const root = document.getElementById('viewRoot');
-
-  const key = `${SESSION.role}:${viewId}`;
-  const renderers = {
-    'colaborador:home': renderColabHome,
-    'colaborador:nova-ideia': renderColabNovaIdeia,
-    'colaborador:minhas-ideias': renderColabMinhasIdeias,
-    'colaborador:conquistas': renderColabConquistas,
-    'colaborador:notificacoes': renderNotificacoesView,
-    'colaborador:perfil': renderPerfilView,
-    'comite:dashboard': renderComiteDashboard,
-    'comite:fila': renderComiteFila,
-    'comite:reunioes': renderComiteReunioes,
-    'comite:implantacoes': renderComiteImplantacoes,
-    'comite:historico': renderComiteHistorico,
-    'comite:perfil': renderPerfilView,
-    'qualidade:dashboard': renderQualDashboard,
-    'qualidade:ideias': renderQualIdeias,
-    'qualidade:comite': renderQualComite,
-    'qualidade:cartas': renderQualCartas,
-    'qualidade:implantacoes': renderQualImplantacoes,
-    'qualidade:indicadores': renderQualIndicadores,
-    'qualidade:usuarios': renderQualUsuarios,
-    'qualidade:auditoria': renderQualAuditoria,
-    'qualidade:config': renderQualConfig,
-    'analista:cartas': renderAprovCartas,
-    'analista:perfil': renderPerfilView,
-    'gerente:cartas': renderAprovCartas,
-    'gerente:indicadores': renderQualIndicadores,
-    'gerente:perfil': renderPerfilView,
-    'diretoria:dashboard': renderDiretoriaDashboard,
-    'diretoria:cartas': renderAprovCartas,
-    'diretoria:perfil': renderPerfilView,
-  };
-  const fn = renderers[key];
-  root.innerHTML = fn ? fn() : `<div class="empty-state">${icon('construction')}<div class="t">Em construção</div></div>`;
-  root.classList.remove('view-enter');
-  void root.offsetWidth; // força o navegador a "esquecer" a animação anterior
-  root.classList.add('view-enter');
-  lucide.createIcons();
-  updateNotifDot();
-}
-
-function refresh() { navigateTo(UI.view); }
-
-// ======================================================================
-// DRAWER / MODAL
-// ======================================================================
-function openDrawer(html) {
-  document.getElementById('drawerContent').innerHTML = html;
-  document.getElementById('drawerOverlay').classList.add('active');
-  lucide.createIcons();
-}
-function closeDrawer() { document.getElementById('drawerOverlay').classList.remove('active'); }
-function openModal(html) {
-  document.getElementById('modalContent').innerHTML = html;
-  document.getElementById('modalOverlay').classList.add('active');
-  lucide.createIcons();
-}
-function closeModal() { document.getElementById('modalOverlay').classList.remove('active'); }
-
-function updateNotifDot() {
-  const count = DB.notificacoes.filter(n => n.audience === SESSION.role && !n.lida).length;
-  document.getElementById('notifDot').style.display = count ? 'block' : 'none';
-}
-function openNotifPanel() {
-  const list = DB.notificacoes.filter(n => n.audience === SESSION.role);
-  openModal(`
-    <h3>Notificações</h3>
-    <p class="sub">${list.length ? 'Marcadas como lidas ao abrir.' : 'Nenhuma notificação por aqui ainda.'}</p>
-    <div class="notif-list">
-      ${list.map(n => `
-        <div class="notif-item ${n.lida ? '' : 'unread'}">
-          <div class="ic">${icon(n.icone)}</div>
-          <div>
-            <div class="txt">${esc(n.texto)}</div>
-            <div class="time">${fmtDateTime(n.data)}</div>
-          </div>
-        </div>`).join('') || ''}
-    </div>
-    <div class="modal-actions"><button class="btn btn-outline" onclick="closeModal()">Fechar</button></div>
-  `);
-  list.forEach(n => n.lida = true);
-  updateNotifDot();
-}
-
-// ======================================================================
-// COMPONENTES REUTILIZÁVEIS
-// ======================================================================
-function badgeStatus(status) {
-  const m = STATUS_META[status] || { label: status, cls: 'badge-gray' };
-  return `<span class="badge ${m.cls}">${m.label}</span>`;
-}
-function badgePrioridade(p) {
-  const m = PRIORIDADE_META[p] || PRIORIDADE_META.normal;
-  return `<span class="badge ${m.cls}">${m.label}</span>`;
-}
-function badgeCategoria(c) {
-  return c === 'seguranca' ? `<span class="badge badge-error">Segurança</span>` : `<span class="badge badge-info">Redução de Custos</span>`;
-}
-function signalProgress(status) {
-  const idx = stageIdx(status);
-  let frontier = -1;
-  CHECKPOINTS.forEach((c, i) => { if (idx >= c.idx) frontier = i; });
-  const isConcluded = status === 'concluida';
-  return `<div class="signal-track">${CHECKPOINTS.map((c, i) => {
-    const done = i < frontier || (i === frontier && isConcluded);
-    const current = i === frontier && !isConcluded;
-    return `${i > 0 ? `<div class="signal-line ${i <= frontier ? 'done' : ''}"></div>` : ''}
-      <div class="signal-step ${done ? 'done' : ''} ${current ? 'current' : ''}">
-        <div class="signal-dot ${done ? 'done' : ''} ${current ? 'current' : ''}"></div>
-      </div>`;
-  }).join('')}</div>
-  <div class="stepper-labels" style="margin-top:8px">${CHECKPOINTS.map((c, i) => `<span class="${i <= frontier ? 'on' : ''}" style="flex:1;text-align:center;font-size:10px">${c.label}</span>`).join('')}</div>`;
-}
-function kpiCard(icon_, label, value, cls, onclick_) {
-  const clickable = onclick_ ? `class="kpi-card clickable" onclick="${onclick_}" role="button" tabindex="0"` : `class="kpi-card"`;
-  return `<div ${clickable}><div class="kpi-top"><span class="kpi-icon">${icon(icon_)}</span></div><div class="kpi-num" style="${cls ? `color:var(--${cls})` : ''}">${value}</div><div class="kpi-label">${label}</div></div>`;
-}
-
-
-/* ============================================================
-   SINAL VERDE — Portal do Colaborador
-   Parte do protótipo do Programa Sinal Verde (ver /README.md).
-   ============================================================ */
-
-// ======================================================================
-// PORTAL DO COLABORADOR
-// ======================================================================
-function minhasIdeias() {
-  return DB.ideias.filter(i => i.colaborador.matricula === SESSION.user.matricula);
-}
-
-function renderColabHome() {
-  const mine = minhasIdeias();
-  const aprovadas = mine.filter(i => i.decisao === 'aprovada').length;
-  const emAnalise = mine.filter(i => !['concluida', 'carta_enviada'].includes(i.status) && i.decisao !== 'reprovada').length;
-  const reprovadas = mine.filter(i => i.decisao === 'reprovada').length;
-  const economiaEstimada = mine.reduce((s, i) => s + ((i.estimativa && i.estimativa.anual) || 0), 0);
-  const recentes = [...mine].sort((a, b) => new Date(b.dataCriacao) - new Date(a.dataCriacao)).slice(0, 5);
-  const total = mine.length || 1;
-  const hoje = new Date().toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'long' });
-  const primeiroNome = (SESSION.user.nome || '').split(' ')[0];
-
-  return `
-  <div style="margin-bottom:18px">
-    <h2 style="font-family:var(--font-display);font-size:22px;font-weight:800;margin:0 0 4px">Olá, ${esc(primeiroNome)} 👋</h2>
-    <div style="font-size:13px;color:var(--text-secondary);text-transform:capitalize">${hoje}</div>
-  </div>
-
-  <div class="kpi-grid">
-    ${kpiCard('send', 'Ideias Enviadas', mine.length, null, "navigateTo('minhas-ideias')")}
-    ${kpiCard('badge-check', 'Aprovadas', aprovadas, null, "navigateTo('conquistas')")}
-    ${kpiCard('clock', 'Em Análise', emAnalise, null, "navigateTo('minhas-ideias')")}
-    ${kpiCard('circle-dollar-sign', 'Economia Estimada', fmtMoney(economiaEstimada), null, "navigateTo('minhas-ideias')")}
-  </div>
-
-  <div class="grid-2">
-    <div class="panel">
-      <div class="panel-head"><h3>${icon('lightbulb')} Últimas Ideias</h3><button class="link-btn" onclick="navigateTo('minhas-ideias')">Ver todas →</button></div>
-      <div class="panel-body" style="padding-top:4px;padding-bottom:4px">
-        <div class="idea-row-list">
-        ${recentes.length ? recentes.map(i => `
-          <button class="idea-row" onclick="openIdeaDrawerColab('${i.id}')">
-            <span class="dot"></span>
-            <span class="info">
-              <div class="t">${esc(i.titulo)}</div>
-              <div class="m">${i.protocolo} · ${(STATUS_META[i.status] || {}).label || i.status}</div>
-            </span>
-            <span class="chev">${icon('chevron-right')}</span>
-          </button>`).join('') : `<div class="empty-state">${icon('inbox')}<div class="t">Nenhuma ideia ainda</div><div class="d">Que tal enviar sua primeira sugestão?</div></div>`}
-        </div>
-      </div>
-    </div>
-
-    <div class="panel">
-      <div class="panel-head"><h3>${icon('gauge')} Progresso</h3></div>
-      <div class="panel-body">
-        <div class="progress-row">
-          <div class="row-top"><span>Aprovadas</span><span class="n">${aprovadas}</span></div>
-          <div class="progress-track"><div class="progress-fill success" style="width:${Math.round(aprovadas / total * 100)}%"></div></div>
-        </div>
-        <div class="progress-row">
-          <div class="row-top"><span>Em Análise</span><span class="n">${emAnalise}</span></div>
-          <div class="progress-track"><div class="progress-fill warning" style="width:${Math.round(emAnalise / total * 100)}%"></div></div>
-        </div>
-        <div class="progress-row">
-          <div class="row-top"><span>Reprovadas</span><span class="n">${reprovadas}</span></div>
-          <div class="progress-track"><div class="progress-fill error" style="width:${Math.round(reprovadas / total * 100)}%"></div></div>
-        </div>
-        <button class="btn btn-primary btn-block" style="margin-top:20px" onclick="navigateTo('nova-ideia')">${icon('plus')} Enviar Nova Ideia</button>
-      </div>
-    </div>
-  </div>`;
-}
-
-function renderColabMinhasIdeias() {
-  const mine = minhasIdeias();
-  return `
-  <div class="panel">
-    <div class="panel-body table-wrap">
-      <table class="data-table">
-        <thead><tr><th>Protocolo</th><th>Título</th><th>Categoria</th><th>Data</th><th>Status</th><th></th></tr></thead>
-        <tbody>
-          ${mine.map(i => `
-            <tr>
-              <td class="mono">${i.protocolo}</td>
-              <td style="max-width:260px">${esc(i.titulo)}</td>
-              <td>${badgeCategoria(i.categoria)}</td>
-              <td>${fmtDate(i.dataCriacao)}</td>
-              <td>${badgeStatus(i.status)}</td>
-              <td><button class="link-btn" onclick="openIdeaDrawerColab('${i.id}')">Ver detalhes</button></td>
-            </tr>`).join('') || `<tr><td colspan="6"><div class="empty-state">${icon('inbox')}<div class="t">Nenhuma ideia enviada</div></div></td></tr>`}
-        </tbody>
-      </table>
-    </div>
-  </div>`;
-}
-
-function renderColabConquistas() {
-  const mine = minhasIdeias();
-  const aprovadas = mine.filter(i => i.decisao === 'aprovada');
-  const premiadas = aprovadas.filter(i => i.premiacaoAnual);
-  const semPremio = aprovadas.filter(i => !i.premiacaoAnual);
-  const proximosMarcos = [
-    { qtd: 1, emoji: '🌱', t: 'Primeira ideia aprovada' },
-    { qtd: 5, emoji: '🌿', t: '5 ideias aprovadas' },
-    { qtd: 10, emoji: '🌳', t: '10 ideias aprovadas' },
-  ];
-
-  return `
-  <div class="panel" style="background:linear-gradient(135deg,var(--primary-light),var(--primary-softer));border:none">
-    <div class="panel-body" style="display:flex;align-items:center;gap:18px;flex-wrap:wrap">
-      <div style="font-size:44px">🏆</div>
-      <div>
-        <div style="font-weight:800;font-size:18px;color:var(--primary-dark)">${aprovadas.length} ideia${aprovadas.length === 1 ? '' : 's'} aprovada${aprovadas.length === 1 ? '' : 's'}</div>
-        <div style="font-size:13px;color:var(--text-secondary)">${premiadas.length ? `Incluindo ${premiadas.length} com premiação anual! 🎉` : 'Continue enviando ideias para desbloquear selos.'}</div>
-      </div>
-    </div>
-  </div>
-
-  ${premiadas.length ? `
-  <div class="section-title">Premiações anuais</div>
-  <div class="badge-grid">
-    ${premiadas.map(i => `
-      <div class="achievement-card gold">
-        <span class="emoji">🏆</span>
-        <div class="t">Premiação Anual ${i.anoPremiacao || ''}</div>
-        <div class="d">${esc(i.titulo)}</div>
-      </div>`).join('')}
-  </div>` : ''}
-
-  <div class="section-title">Ideias aprovadas</div>
-  <div class="badge-grid">
-    ${semPremio.map(i => `
-      <div class="achievement-card">
-        <span class="emoji">💚</span>
-        <div class="t">Ideia aprovada</div>
-        <div class="d">${esc(i.titulo)}</div>
-      </div>`).join('') || (premiadas.length ? '' : `<div class="empty-state" style="grid-column:1/-1">${icon('award')}<div class="t">Nenhum selo ainda</div><div class="d">Envie sua primeira ideia para começar a coleção!</div></div>`)}
-  </div>
-
-  <div class="section-title">Próximos marcos</div>
-  <div class="badge-grid">
-    ${proximosMarcos.map(m => `
-      <div class="achievement-card ${aprovadas.length >= m.qtd ? '' : 'locked'}">
-        <span class="emoji">${m.emoji}</span>
-        <div class="t">${m.t}</div>
-        <div class="d">${aprovadas.length >= m.qtd ? 'Conquistado!' : `${aprovadas.length}/${m.qtd}`}</div>
-      </div>`).join('')}
-  </div>`;
-}
-
-function openIdeaDrawerColab(id) {
-  const i = DB.ideias.find(x => x.id === id);
-  const showCelebration = (i.status === 'concluida' || i.status === 'carta_enviada') && i.decisao === 'aprovada';
-  openDrawer(`
-    <div class="drawer-head">
-      <div><h2>${esc(i.titulo)}</h2><div class="p">${i.protocolo}</div></div>
-      <button class="drawer-close" onclick="closeDrawer()">${icon('x')}</button>
-    </div>
-    <div class="drawer-body">
-      ${i.premiacaoAnual ? `
-      <div class="celebrate-banner gold">
-        <span class="emoji">🏆</span>
-        <div class="t">Essa ideia ganhou a Premiação Anual ${i.anoPremiacao || ''}!</div>
-        <div class="d">Parabéns pela contribuição — ela está na sua aba Conquistas.</div>
-      </div>` : showCelebration ? `
-      <div class="celebrate-banner">
-        <span class="emoji">🎉</span>
-        <div class="t">Sua ideia foi aprovada!</div>
-        <div class="d">Esse selo já está guardado na sua aba Conquistas.</div>
-      </div>` : ''}
-
-      <div class="section-title">Andamento</div>
-      ${signalProgress(i.status)}
-
-      <div class="section-title">Detalhes</div>
-      <div class="kv-grid">
-        <div class="kv"><div class="k">Categoria</div><div class="v">${i.categoria === 'seguranca' ? 'Segurança' : 'Redução de Custos'}</div></div>
-        <div class="kv"><div class="k">Área</div><div class="v">${esc(i.area)}</div></div>
-        <div class="kv"><div class="k">Enviada em</div><div class="v">${fmtDate(i.dataCriacao)}</div></div>
-        <div class="kv"><div class="k">Status atual</div><div class="v">${badgeStatus(i.status)}</div></div>
-      </div>
-
-      <div class="section-title">Descrição enviada</div>
-      <div class="desc-box">${esc(i.descricao)}</div>
-
-      ${i.status === 'concluida' || i.status === 'carta_enviada' ? `
-      <div class="section-title">Resposta oficial</div>
-      <div class="desc-box">${i.decisao === 'aprovada' ? '✅ Sua ideia foi <b>aprovada</b>! Em breve você poderá acompanhar a implantação.' : '❌ Sua ideia não foi aprovada nesta etapa. Agradecemos sua contribuição — continue enviando sugestões!'}</div>
-      ` : `
-      <div class="section-title">O que você não visualiza</div>
-      <div class="desc-box" style="color:var(--text-muted);font-size:12.5px">Comentários internos, pareceres do Comitê e nomes de aprovadores permanecem visíveis apenas para a equipe de Qualidade, conforme as regras de perfil do Programa Sinal Verde.</div>`}
-    </div>`);
-  if (showCelebration) celebrateConfetti(i.premiacaoAnual ? 40 : 24);
-}
-
-function renderNotificacoesView() {
-  const list = DB.notificacoes.filter(n => n.audience === SESSION.role);
-  list.forEach(n => n.lida = true);
-  updateNotifDot();
-  return `<div class="notif-list">${list.map(n => `
-    <div class="notif-item"><div class="ic">${icon(n.icone)}</div><div><div class="txt">${esc(n.texto)}</div><div class="time">${fmtDateTime(n.data)}</div></div></div>`).join('') ||
-    `<div class="empty-state">${icon('bell-off')}<div class="t">Sem notificações</div></div>`}</div>`;
-}
-
-function renderPerfilView() {
-  const u = SESSION.user;
-  return `
-  <div class="panel" style="max-width:520px">
-    <div class="panel-head"><h3>Meus dados</h3></div>
-    <div class="panel-body">
-      <div class="field"><label>Nome</label><input value="${esc(u.nome)}" readonly></div>
-      ${u.matricula ? `<div class="field"><label>Matrícula</label><input value="${esc(u.matricula)}" readonly></div>` : ''}
-      ${u.cargo ? `<div class="field"><label>Cargo</label><input value="${esc(u.cargo)}" readonly></div>` : ''}
-      ${u.funcao ? `<div class="field"><label>Função</label><input value="${esc(u.funcao)}" readonly></div>` : ''}
-      ${u.setor ? `<div class="field"><label>Setor</label><input value="${esc(u.setor)}" readonly></div>` : ''}
-      <div class="field"><label>Telefone</label><input id="perfilTelefone" value="${esc(u.telefone || '')}" placeholder="(00) 00000-0000"></div>
-      <div class="field"><label>E-mail</label><input id="perfilEmail" value="${esc(u.email || '')}" placeholder="voce@empresa.com"></div>
-      <button class="btn btn-primary" onclick="salvarPerfil()">Salvar alterações</button>
-    </div>
-  </div>
-  <div class="panel" style="max-width:520px">
-    <div class="panel-head"><h3>Segurança</h3></div>
-    <div class="panel-body">
-      <div class="field"><label>Senha atual</label><input type="password" placeholder="••••••••"></div>
-      <div class="field"><label>Nova senha</label><input type="password" placeholder="••••••••"></div>
-      <button class="btn btn-outline" onclick="toast('Senha alterada com sucesso.')">Alterar senha</button>
-    </div>
-  </div>`;
-}
-function salvarPerfil() {
-  const tel = document.getElementById('perfilTelefone').value;
-  const email = document.getElementById('perfilEmail').value;
-  SESSION.user.telefone = tel; SESSION.user.email = email;
-  toast('Dados atualizados com sucesso.');
-}
-
-// ---------------- Nova Ideia (stepper) ----------------
-function renderColabNovaIdeia() {
-  if (!UI.draft) UI.draft = { categoria: null, titulo: '', area: '', descricao: '', beneficio: '', estimativaMensal: '', estimativaAnual: '', investimento: 'Sem investimento', tempo: 'Imediato', anexos: [] };
-  UI.colabStep = UI.colabStep || 1;
-  const pct = (UI.colabStep / 3) * 100;
-  return `
-  <div class="panel"><div class="panel-body">
-    <div class="stepper-bar"><div style="width:${pct}%"></div></div>
-    <div class="stepper-labels">
-      <span class="${UI.colabStep >= 1 ? 'on' : ''}">1. Seus dados</span>
-      <span class="${UI.colabStep >= 2 ? 'on' : ''}">2. A ideia</span>
-      <span class="${UI.colabStep >= 3 ? 'on' : ''}">3. Revisão e envio</span>
-    </div>
-    <div id="stepBody">${UI.colabStep === 1 ? stepDadosHtml() : UI.colabStep === 2 ? stepIdeiaHtml() : stepRevisaoHtml()}</div>
-  </div></div>`;
-}
-
-function stepDadosHtml() {
-  const u = SESSION.user;
-  return `
-    <div class="form-grid">
-      <div class="field"><label>Nome</label><input value="${esc(u.nome)}" readonly></div>
-      <div class="field"><label>Matrícula</label><input value="${esc(u.matricula)}" readonly></div>
-      <div class="field"><label>Função</label><input value="${esc(u.funcao)}" readonly></div>
-      <div class="field"><label>Setor</label><input value="${esc(u.setor)}" readonly></div>
-      <div class="field"><label>Unidade</label><input value="${esc(u.unidade)}" readonly></div>
-      <div class="field"><label>Telefone</label><input id="dTelefone" value="${esc(u.telefone)}"></div>
-      <div class="field full"><label>E-mail</label><input id="dEmail" value="${esc(u.email)}"></div>
-    </div>
-    <div class="step-actions"><span></span><button class="btn btn-primary" onclick="colabGoStep(2)">Continuar ${icon('arrow-right')}</button></div>`;
-}
-
-function stepIdeiaHtml() {
-  const d = UI.draft;
-  const seg = d.categoria === 'seguranca';
-  const custo = d.categoria === 'custos';
-  const similares = d.titulo.length > 4 ? findSimilar(d.titulo, null) : [];
-  return `
-    <div class="section-title">Categoria</div>
-    <div class="radio-cards">
-      <label class="radio-card ${seg ? 'checked' : ''}"><input type="radio" name="cat" ${seg ? 'checked' : ''} onchange="setDraftCat('seguranca')"><span class="t">🦺 Segurança</span></label>
-      <label class="radio-card ${custo ? 'checked' : ''}"><input type="radio" name="cat" ${custo ? 'checked' : ''} onchange="setDraftCat('custos')"><span class="t">💰 Redução de Custos</span></label>
-    </div>
-    ${d.categoria ? `
-    <div class="form-grid" style="margin-top:18px">
-      <div class="field"><label>Área envolvida</label>
-        <select id="dArea" onchange="draftSet('area', this.value)">
-          <option value="">Selecione...</option>
-          ${AREAS.map(a => `<option value="${a}" ${d.area === a ? 'selected' : ''}>${a}</option>`).join('')}
-        </select>
-      </div>
-      <div class="field full">
-        <label>Título da ideia</label>
-        <input id="dTitulo" maxlength="120" value="${esc(d.titulo)}" oninput="draftSet('titulo', this.value); rerenderStep2Similares();" placeholder="Ex: Economizar diesel na frota">
-        <div class="char-count">${d.titulo.length}/120</div>
-        <div id="similaresBox">${similares.length ? similaresHtml(similares) : ''}</div>
-      </div>
-      <div class="field full">
-        <label>Descrição detalhada (mín. 100 caracteres)</label>
-        <textarea id="dDescricao" maxlength="5000" oninput="draftSet('descricao', this.value); document.getElementById('descCount').textContent=this.value.length;" placeholder="Explique o problema atual e a melhoria proposta...">${esc(d.descricao)}</textarea>
-        <div class="char-count"><span id="descCount">${d.descricao.length}</span>/5000 (mínimo 100)</div>
-      </div>
-      <div class="field full"><label>Benefício esperado</label><textarea id="dBeneficio" maxlength="1000" oninput="draftSet('beneficio', this.value)" placeholder="Qual resultado você espera?">${esc(d.beneficio)}</textarea></div>
-      ${custo ? `
-      <div class="field"><label>Economia mensal estimada (R$)</label><input type="number" min="0" id="dEstMensal" value="${d.estimativaMensal}" oninput="draftSet('estimativaMensal', this.value)"></div>
-      <div class="field"><label>Economia anual estimada (R$)</label><input type="number" min="0" id="dEstAnual" value="${d.estimativaAnual}" oninput="draftSet('estimativaAnual', this.value)"></div>
-      ` : ''}
-      <div class="field"><label>Investimento necessário</label>
-        <select onchange="draftSet('investimento', this.value)">
-          ${['Sem investimento', 'Até R$500', 'Até R$2.000', 'Até R$10.000', 'Acima de R$10.000', 'Outro'].map(o => `<option ${d.investimento === o ? 'selected' : ''}>${o}</option>`).join('')}
-        </select>
-      </div>
-      <div class="field"><label>Tempo estimado de implantação</label>
-        <select onchange="draftSet('tempo', this.value)">
-          ${['Imediato', 'Até 30 dias', 'Até 60 dias', 'Até 90 dias', 'Mais de 90 dias'].map(o => `<option ${d.tempo === o ? 'selected' : ''}>${o}</option>`).join('')}
-        </select>
-      </div>
-      <div class="field full"><label>Anexos (PDF, DOCX, XLSX, PNG, JPG, MP4 — até 10 arquivos, 20MB cada)</label>
-        <div class="upload-zone">${icon('upload')}<div>Arraste arquivos aqui ou <button class="link-btn" onclick="simulateAttach()">selecione no computador</button></div></div>
-        <div class="chip-list">${d.anexos.map((a, idx) => `<span class="chip">${icon('paperclip')} ${esc(a)} <button onclick="removeAnexo(${idx})">×</button></span>`).join('')}</div>
-      </div>
-    </div>` : ''}
-    <div class="step-actions">
-      <button class="btn btn-outline" onclick="colabGoStep(1)">${icon('arrow-left')} Voltar</button>
-      <button class="btn btn-primary" onclick="colabGoStep(3)">Continuar ${icon('arrow-right')}</button>
-    </div>`;
-}
-
-function similaresHtml(sims) {
-  return `<div class="similar-box"><div class="h">${icon('search')} Encontramos ideias semelhantes</div>
-    ${sims.map(s => `<div class="similar-item"><span><span class="prot">${s.protocolo}</span> — ${esc(s.titulo)} <span class="badge badge-gray" style="margin-left:6px">${s.statusLabel}</span></span><span class="sim-pct">${s.score}%</span></div>`).join('')}
-  </div>`;
-}
-function rerenderStep2Similares() {
-  const box = document.getElementById('similaresBox');
-  if (!box) return;
-  const sims = UI.draft.titulo.length > 4 ? findSimilar(UI.draft.titulo, null) : [];
-  box.innerHTML = sims.length ? similaresHtml(sims) : '';
-  lucide.createIcons();
-}
-function setDraftCat(cat) { UI.draft.categoria = cat; document.getElementById('stepBody').innerHTML = stepIdeiaHtml(); lucide.createIcons(); }
-function draftSet(field, val) { UI.draft[field] = val; }
-function simulateAttach() { UI.draft.anexos.push(`evidencia_${UI.draft.anexos.length + 1}.pdf`); document.getElementById('stepBody').innerHTML = stepIdeiaHtml(); lucide.createIcons(); }
-function removeAnexo(idx) { UI.draft.anexos.splice(idx, 1); document.getElementById('stepBody').innerHTML = stepIdeiaHtml(); lucide.createIcons(); }
-
-function stepRevisaoHtml() {
-  const d = UI.draft;
-  return `
-    <div class="section-title">Revise antes de enviar</div>
-    <div class="kv-grid">
-      <div class="kv full" style="grid-column:1/-1"><div class="k">Título</div><div class="v">${esc(d.titulo)}</div></div>
-      <div class="kv"><div class="k">Categoria</div><div class="v">${d.categoria === 'seguranca' ? 'Segurança' : 'Redução de Custos'}</div></div>
-      <div class="kv"><div class="k">Área</div><div class="v">${esc(d.area || '—')}</div></div>
-      <div class="kv"><div class="k">Investimento</div><div class="v">${esc(d.investimento)}</div></div>
-      <div class="kv"><div class="k">Prazo estimado</div><div class="v">${esc(d.tempo)}</div></div>
-    </div>
-    <div class="section-title">Descrição</div>
-    <div class="desc-box">${esc(d.descricao) || '—'}</div>
-    <div class="section-title">Anexos</div>
-    <div class="chip-list">${d.anexos.length ? d.anexos.map(a => `<span class="chip">${icon('paperclip')} ${esc(a)}</span>`).join('') : '<span style="color:var(--text-muted);font-size:12.5px">Nenhum anexo.</span>'}</div>
-    <div class="field" style="margin-top:18px"><label><input type="checkbox" id="dConfirma" style="width:auto;accent-color:var(--primary)"> Confirmo que as informações acima são verdadeiras.</label></div>
-    <div class="step-actions">
-      <button class="btn btn-outline" onclick="colabGoStep(2)">${icon('arrow-left')} Voltar</button>
-      <button class="btn btn-primary" onclick="colabSubmitIdea()">${icon('send')} Enviar ideia</button>
-    </div>`;
-}
-function colabGoStep(n) {
-  if (n === 3) {
-    const d = UI.draft;
-    if (!d.categoria) { toast('Selecione uma categoria.'); return; }
-    if (!d.titulo || d.titulo.length < 5) { toast('Informe um título para a ideia.'); return; }
-    if (!d.descricao || d.descricao.length < 100) { toast('A descrição deve ter no mínimo 100 caracteres.'); return; }
-  }
-  UI.colabStep = n;
-  document.getElementById('viewRoot').innerHTML = renderColabNovaIdeia();
-  lucide.createIcons();
-}
-function colabSubmitIdea() {
-  if (!document.getElementById('dConfirma').checked) { toast('Confirme que as informações são verdadeiras.'); return; }
-  const d = UI.draft;
-  const idea = {
-    id: uid('I'), protocolo: nextProtocolo(),
-    colaborador: { ...SESSION.user },
-    area: d.area || AREAS[0], categoria: d.categoria,
-    titulo: d.titulo, descricao: d.descricao, beneficio: d.beneficio || '—',
-    estimativa: { mensal: Number(d.estimativaMensal) || 0, anual: Number(d.estimativaAnual) || 0 },
-    investimento: d.investimento, tempoImplantacao: d.tempo, anexos: d.anexos,
-    prioridade: 'normal', dataCriacao: new Date().toISOString(),
-    historico: [], parecerComite: null, decisaoQualidade: null, decisao: null, cartaId: null, planoId: null,
-    status: 'enviada',
-  };
-  addHistorico(idea, `${idea.colaborador.nome} criou a ideia.`);
-  DB.ideias.unshift(idea);
-  addNotif('qualidade', `Nova ideia recebida: "${idea.titulo}" (${idea.protocolo}).`, 'inbox');
-  addAudit(idea.colaborador.nome, `Enviou a ideia ${idea.protocolo}.`);
-
-  UI.draft = null; UI.colabStep = 1;
-  document.getElementById('viewRoot').innerHTML = `
-    <div class="panel" style="max-width:520px;text-align:center"><div class="panel-body" style="padding:44px 30px">
-      <div style="width:64px;height:64px;border-radius:50%;background:var(--success-light);color:var(--success);display:flex;align-items:center;justify-content:center;margin:0 auto 18px">${icon('check-circle-2', '')}</div>
-      <h2 style="font-family:var(--font-display);margin:0 0 6px">Sua ideia foi enviada!</h2>
-      <p class="mono" style="font-size:15px;margin:0 0 10px">${idea.protocolo}</p>
-      <p style="color:var(--text-secondary);font-size:13.5px">Recebemos sua sugestão. A equipe da Qualidade irá analisá-la e você poderá acompanhar todo o andamento pelo portal.</p>
-      <div style="display:flex;gap:10px;justify-content:center;margin-top:20px">
-        <button class="btn btn-outline" onclick="navigateTo('home')">Voltar ao painel</button>
-        <button class="btn btn-primary" onclick="navigateTo('nova-ideia')">Nova ideia</button>
-      </div>
-    </div></div>`;
-  lucide.createIcons();
-  celebrateConfetti(30);
-}
-
-
-/* ============================================================
-   SINAL VERDE — Portal do Comitê
-   Parte do protótipo do Programa Sinal Verde (ver /README.md).
-   ============================================================ */
-
-// ======================================================================
-// PORTAL DO COMITÊ
-// ======================================================================
-function renderComiteDashboard() {
-  const aguardando = DB.ideias.filter(i => i.status === 'em_analise_comite').length;
-  const analisadas = DB.ideias.filter(i => i.parecerComite).length + 148;
-  const implant = DB.ideias.filter(i => ['implantacao', 'acompanhamento'].includes(i.status)).length + 26;
-  return `
-  <div class="kpi-grid">
-    ${kpiCard('list-checks', 'Ideias aguardando parecer', aguardando, null, "navigateTo('fila')")}
-    ${kpiCard('calendar-check', 'Reunião de hoje', DB.reunioes.some(r => r.data === new Date().toISOString().slice(0, 10)) ? 'Sim' : 'Nenhuma', null, "navigateTo('reunioes')")}
-    ${kpiCard('history', 'Ideias já analisadas', analisadas, null, "navigateTo('historico')")}
-    ${kpiCard('rocket', 'Implantações acompanhadas', implant, null, "navigateTo('implantacoes')")}
-  </div>
-  <div class="grid-2">
-    <div class="panel">
-      <div class="panel-head"><h3>Efetividade das ideias implantadas</h3></div>
-      <div class="panel-body">
-        ${hbar('Ideias implantadas', 95)}
-        ${hbar('Economia confirmada', 82)}
-        ${hbar('Em acompanhamento', 18)}
-      </div>
-    </div>
-    <div class="panel">
-      <div class="panel-head"><h3>Próxima reunião</h3></div>
-      <div class="panel-body">
-        ${DB.reunioes.filter(r => r.status === 'agendada').map(r => `
-          <div class="kv" style="margin-bottom:10px"><div class="k">${r.codigo}</div><div class="v">${fmtDate(r.data)} às ${r.hora} · ${esc(r.local)}</div></div>
-        `).join('') || '<p style="color:var(--text-muted);font-size:13px">Nenhuma reunião agendada.</p>'}
-        <button class="btn btn-outline btn-sm" onclick="navigateTo('reunioes')">Ver agenda completa</button>
-      </div>
-    </div>
-  </div>`;
-}
-function hbar(label, pct) {
-  return `<div class="hbar-row"><span class="name">${label}</span><div class="hbar-track"><div class="hbar-fill" style="width:${pct}%"></div></div><span class="n">${pct}%</span></div>`;
-}
-
-function renderComiteFila() {
-  const fila = DB.ideias.filter(i => i.status === 'em_analise_comite');
-  return `
-  <div class="panel"><div class="panel-body table-wrap">
-    <table class="data-table">
-      <thead><tr><th>Protocolo</th><th>Título</th><th>Categoria</th><th>Área</th><th>Prioridade</th><th></th></tr></thead>
-      <tbody>
-        ${fila.map(i => `
-          <tr>
-            <td class="mono">${i.protocolo}</td>
-            <td style="max-width:280px">${esc(i.titulo)}</td>
-            <td>${badgeCategoria(i.categoria)}</td>
-            <td>${esc(i.area)}</td>
-            <td>${badgePrioridade(i.prioridade)}</td>
-            <td><button class="btn btn-primary btn-sm" onclick="openParecerModal('${i.id}')">Analisar</button></td>
-          </tr>`).join('') || `<tr><td colspan="6"><div class="empty-state">${icon('coffee')}<div class="t">Nenhuma ideia aguardando parecer</div></div></td></tr>`}
-      </tbody>
-    </table>
-  </div></div>`;
-}
-
-function openParecerModal(id) {
-  const i = DB.ideias.find(x => x.id === id);
-  const sims = findSimilar(i.titulo, i.id);
-  openDrawer(`
-    <div class="drawer-head"><div><h2>${esc(i.titulo)}</h2><div class="p">${i.protocolo}</div></div><button class="drawer-close" onclick="closeDrawer()">${icon('x')}</button></div>
-    <div class="drawer-body">
-      <div class="kv-grid">
-        <div class="kv"><div class="k">Categoria</div><div class="v">${i.categoria === 'seguranca' ? 'Segurança' : 'Redução de Custos'}</div></div>
-        <div class="kv"><div class="k">Área</div><div class="v">${esc(i.area)}</div></div>
-      </div>
-      <div class="section-title">Descrição completa</div>
-      <div class="desc-box">${esc(i.descricao)}</div>
-      <div class="section-title">Benefício esperado</div>
-      <div class="desc-box">${esc(i.beneficio)}</div>
-      ${i.estimativa.anual ? `<div class="section-title">Estimativa financeira</div><div class="kv-grid"><div class="kv"><div class="k">Mensal</div><div class="v">${fmtMoney(i.estimativa.mensal)}</div></div><div class="kv"><div class="k">Anual</div><div class="v">${fmtMoney(i.estimativa.anual)}</div></div></div>` : ''}
-      ${sims.length ? `<div class="section-title">Ideias semelhantes (somente leitura)</div>${similaresHtml(sims)}` : ''}
-
-      <div class="section-title">Parecer técnico</div>
-      <div class="radio-cards">
-        <label class="radio-card" id="pcFav"><input type="radio" name="parecer" value="favoravel" onchange="setParecerChoice('favoravel')"><span class="t">✅ Favorável</span></label>
-        <label class="radio-card" id="pcDesfav"><input type="radio" name="parecer" value="desfavoravel" onchange="setParecerChoice('desfavoravel')"><span class="t">❌ Desfavorável</span></label>
-      </div>
-      <div class="field" style="margin-top:14px"><label>Justificativa (mín. 100 caracteres)</label>
-        <textarea id="parecerJustificativa" oninput="document.getElementById('pjCount').textContent=this.value.length"></textarea>
-        <div class="char-count"><span id="pjCount">0</span>/100 mínimo</div>
-      </div>
-      <div class="field"><label>Riscos identificados (opcional)</label><textarea id="parecerRiscos"></textarea></div>
-      <button class="btn btn-primary btn-block" onclick="submitParecer('${i.id}')">${icon('lock')} Finalizar Parecer</button>
-      <p style="font-size:11.5px;color:var(--text-muted);margin-top:8px">Após finalizar, o parecer não poderá mais ser editado, corrigido ou excluído.</p>
-    </div>`);
-}
-function setParecerChoice(v) {
-  document.getElementById('pcFav').classList.toggle('checked', v === 'favoravel');
-  document.getElementById('pcDesfav').classList.toggle('checked', v === 'desfavoravel');
-}
-function submitParecer(id) {
-  const resultado = document.querySelector('input[name="parecer"]:checked');
-  const justificativa = document.getElementById('parecerJustificativa').value.trim();
-  if (!resultado) { toast('Selecione Favorável ou Desfavorável.'); return; }
-  if (justificativa.length < 100) { toast('A justificativa deve ter no mínimo 100 caracteres.'); return; }
-  const i = DB.ideias.find(x => x.id === id);
-  i.parecerComite = { resultado: resultado.value, justificativa, riscos: document.getElementById('parecerRiscos').value.trim(), data: new Date().toISOString(), participantes: [SESSION.user.nome, 'Fernanda Dias', 'Carlos Prado'] };
-  i.status = 'aguardando_decisao';
-  addHistorico(i, `Comitê registrou parecer ${resultado.value === 'favoravel' ? 'favorável' : 'desfavorável'}.`);
-  addAudit(SESSION.user.nome, `Emitiu parecer para ${i.protocolo}.`);
-  addNotif('qualidade', `Parecer do Comitê registrado para ${i.protocolo}. Decisão oficial pendente.`, 'scale');
-  closeDrawer();
-  toast('Parecer registrado. Esta decisão não poderá mais ser alterada.');
-  refresh();
-}
-
-function renderComiteReunioes() {
-  return `
-  <div class="panel">
-    <div class="panel-head"><h3>Agenda</h3><button class="btn btn-outline btn-sm" onclick="toast('No Portal do Comitê, a agenda é criada pela equipe de Qualidade.')">${icon('info')} Sobre a agenda</button></div>
-    <div class="panel-body table-wrap">
-      <table class="data-table">
-        <thead><tr><th>Código</th><th>Data</th><th>Local</th><th>Participantes</th><th>Status</th><th>Ata</th></tr></thead>
-        <tbody>
-          ${DB.reunioes.map(r => `
-            <tr>
-              <td class="mono">${r.codigo}</td>
-              <td>${fmtDate(r.data)} · ${r.hora}</td>
-              <td>${esc(r.local)}</td>
-              <td>${r.participantes.length}</td>
-              <td>${r.status === 'agendada' ? '<span class="badge badge-warning">Agendada</span>' : '<span class="badge badge-success">Realizada</span>'}</td>
-              <td>${r.ata ? `<button class="link-btn" onclick="verAta('${r.id}')">Ver ata</button>` : '—'}</td>
-            </tr>`).join('')}
-        </tbody>
-      </table>
-    </div>
-  </div>`;
-}
-function verAta(id) {
-  const r = DB.reunioes.find(x => x.id === id);
-  openModal(`<h3>Ata — ${r.codigo}</h3><p class="sub">${fmtDate(r.data)} às ${r.hora} · ${esc(r.local)}</p>
-    <div class="desc-box">${esc(r.ata)}</div>
-    <div class="modal-actions"><button class="btn btn-outline" onclick="closeModal()">Fechar</button></div>`);
-}
-
-function renderComiteImplantacoes() {
-  const planos = DB.planos.filter(p => ['execucao', 'testes', 'validacao', 'concluido'].includes(p.status));
-  return `
-  <div class="panel"><div class="panel-body table-wrap">
-    <table class="data-table">
-      <thead><tr><th>Ideia</th><th>Status</th><th>Economia prevista</th><th>Economia obtida</th><th></th></tr></thead>
-      <tbody>
-        ${planos.map(p => {
-          const idea = DB.ideias.find(i => i.id === p.ideiaId);
-          return `<tr>
-            <td>${esc(idea.titulo)}</td>
-            <td><span class="badge badge-info">${planoStatusLabel(p.status)}</span></td>
-            <td>${fmtMoney(p.economia.prevista)}</td>
-            <td>${fmtMoney(p.economia.obtida)}</td>
-            <td><button class="link-btn" onclick="openPlanoDrawer('${p.id}', true)">Ver</button></td>
-          </tr>`;
-        }).join('') || `<tr><td colspan="5"><div class="empty-state">${icon('rocket')}<div class="t">Nenhuma implantação em acompanhamento</div></div></td></tr>`}
-      </tbody>
-    </table>
-  </div></div>`;
-}
-
-function renderComiteHistorico() {
-  const analisadas = DB.ideias.filter(i => i.parecerComite);
-  return `
-  <div class="panel"><div class="panel-body table-wrap">
-    <table class="data-table">
-      <thead><tr><th>Protocolo</th><th>Título</th><th>Parecer</th><th>Data</th><th>Resultado final</th></tr></thead>
-      <tbody>
-        ${analisadas.map(i => `
-          <tr>
-            <td class="mono">${i.protocolo}</td>
-            <td>${esc(i.titulo)}</td>
-            <td>${i.parecerComite.resultado === 'favoravel' ? '<span class="badge badge-success">Favorável</span>' : '<span class="badge badge-error">Desfavorável</span>'}</td>
-            <td>${fmtDate(i.parecerComite.data)}</td>
-            <td>${badgeStatus(i.status)}</td>
-          </tr>`).join('') || `<tr><td colspan="5"><div class="empty-state">${icon('history')}<div class="t">Nenhum parecer registrado ainda</div></div></td></tr>`}
-      </tbody>
-    </table>
-  </div></div>`;
-}
-
-
-/* ============================================================
-   SINAL VERDE — Portal da Qualidade — núcleo operacional
-   Parte do protótipo do Programa Sinal Verde (ver /README.md).
-   ============================================================ */
-
-// ======================================================================
-// PORTAL DA QUALIDADE
-// ======================================================================
-function renderQualDashboard() {
-  const ideias = DB.ideias;
-  const aguardandoAnalise = ideias.filter(i => ['recebida', 'aguardando_reuniao'].includes(i.status)).length;
-  const cartasElaboracao = ideias.filter(i => i.status === 'carta_elaboracao').length;
-  const cartasAnalista = ideias.filter(i => i.status === 'carta_analista').length;
-  const cartasGerente = ideias.filter(i => i.status === 'carta_gerente').length;
-  const cartasDiretoria = ideias.filter(i => i.status === 'carta_diretoria').length;
-  const implantAndamento = ideias.filter(i => i.status === 'implantacao').length;
-  const acompAtivos = ideias.filter(i => i.status === 'acompanhamento').length;
-
-  return `
-  <div class="kpi-grid">
-    ${kpiCard('inbox', 'Aguardando análise', aguardandoAnalise, null, "navigateTo('ideias')")}
-    ${kpiCard('pencil', 'Cartas aguardando elaboração', cartasElaboracao, null, "navigateTo('cartas')")}
-    ${kpiCard('file-check-2', 'Aguardando Analista', cartasAnalista, null, "navigateTo('cartas')")}
-    ${kpiCard('briefcase', 'Aguardando Gerente', cartasGerente, null, "navigateTo('cartas')")}
-  </div>
-  <div class="kpi-grid">
-    ${kpiCard('landmark', 'Aguardando Diretoria', cartasDiretoria, null, "navigateTo('cartas')")}
-    ${kpiCard('rocket', 'Implantações em andamento', implantAndamento, null, "navigateTo('implantacoes')")}
-    ${kpiCard('activity', 'Acompanhamentos ativos', acompAtivos, null, "navigateTo('implantacoes')")}
-    ${kpiCard('badge-check', 'Concluídas', ideias.filter(i => i.status === 'concluida').length, null, "navigateTo('ideias')")}
-  </div>
-
-  <div class="grid-2">
-    <div class="panel">
-      <div class="panel-head"><h3>Central de Pendências</h3><span class="sub">Ideias que precisam de uma ação da Qualidade agora</span></div>
-      <div class="panel-body table-wrap">
-        ${pendenciasQualidade()}
-      </div>
-    </div>
-    <div class="panel">
-      <div class="panel-head"><h3>Alertas de SLA</h3></div>
-      <div class="panel-body">
-        ${alertasSla()}
-      </div>
-    </div>
-  </div>`;
-}
-function diasDesde(iso) { return Math.max(0, Math.floor((Date.now() - new Date(iso).getTime()) / 86400000)); }
-function slaBadgeFor(dias, limite) {
-  if (dias > limite) return `<span class="badge badge-error">${dias}d (atrasado)</span>`;
-  if (dias >= limite - 1) return `<span class="badge badge-warning">${dias}d</span>`;
-  return `<span class="badge badge-success">${dias}d</span>`;
-}
-function pendenciasQualidade() {
-  const acao = (i) => ({
-    recebida: { label: 'Agendar reunião', fn: `qualAgendarReuniaoModal('${i.id}')` },
-    aguardando_reuniao: { label: 'Iniciar análise do Comitê', fn: `qualIniciarAnalise('${i.id}')` },
-    aguardando_decisao: { label: 'Registrar decisão oficial', fn: `qualDecisaoModal('${i.id}')` },
-    carta_elaboracao: { label: 'Elaborar carta', fn: `openCartaDrawer('${i.cartaId}')` },
-    carta_pronta: { label: 'Enviar carta', fn: `openCartaDrawer('${i.cartaId}')` },
-  }[i.status]);
-  const pend = DB.ideias.filter(i => acao(i)).slice(0, 8);
-  if (!pend.length) return `<div class="empty-state">${icon('sparkles')}<div class="t">Tudo em dia por aqui!</div></div>`;
-  return `<table class="data-table"><tbody>${pend.map(i => {
-    const a = acao(i);
-    return `<tr><td class="mono">${i.protocolo}</td><td style="max-width:200px">${esc(i.titulo)}</td><td>${badgeStatus(i.status)}</td><td><button class="btn btn-primary btn-sm" onclick="${a.fn}">${a.label}</button></td></tr>`;
-  }).join('')}</tbody></table>`;
-}
-function alertasSla() {
-  const items = [];
-  DB.ideias.forEach(i => {
-    if (i.status === 'recebida') { const d = diasDesde(i.dataCriacao); if (d >= 1) items.push({ txt: `${i.protocolo} sem reunião agendada`, dias: d, limite: 1 }); }
-    if (i.status === 'carta_analista' || i.status === 'carta_gerente' || i.status === 'carta_diretoria') { const d = diasDesde(i.dataCriacao); if (d >= 2) items.push({ txt: `${i.protocolo} — carta parada em aprovação`, dias: d, limite: 2 }); }
+function campaignParticipants(id){ return participants.filter(p=>p.campaignId===id); }
+function fillCampaignSelects(){
+  const selects = [document.getElementById('selectCampanhaParticipantes'), document.getElementById('selectCampanhaElegiveis'), document.getElementById('selectCampanhaSorteio'), document.getElementById('selectCampanhaRelatorio')];
+  selects.forEach(sel=>{
+    if(!sel) return;
+    const prev = sel.value;
+    sel.innerHTML = campaigns.map(c=>`<option value="${c.id}">${c.nome}</option>`).join('');
+    if(prev) sel.value = prev;
   });
-  if (!items.length) return `<div class="empty-state">${icon('shield-check')}<div class="t">Nenhum SLA vencido</div></div>`;
-  return items.map(it => `<div style="display:flex;justify-content:space-between;align-items:center;padding:9px 0;border-bottom:1px solid var(--border);font-size:13px">${esc(it.txt)} ${slaBadgeFor(it.dias, it.limite)}</div>`).join('');
 }
 
-function renderQualIdeias() {
-  return `
-    <div class="filters-row">
-      <div class="search-box">${icon('search')}<input id="qIdeiasSearch" placeholder="Pesquisar por protocolo, título, colaborador..." value="${esc(UI.qualSearch || '')}" oninput="UI.qualSearch=this.value; updateQualIdeiasResults();"></div>
-      <button class="btn ${UI.qualIdeiasMode === 'table' ? 'btn-primary' : 'btn-outline'} btn-sm" onclick="UI.qualIdeiasMode='table';refresh()">${icon('table')} Tabela</button>
-      <button class="btn ${UI.qualIdeiasMode === 'kanban' ? 'btn-primary' : 'btn-outline'} btn-sm" onclick="UI.qualIdeiasMode='kanban';refresh()">${icon('layout-grid')} Kanban</button>
-    </div>
-    <div id="qIdeiasResults">${UI.qualIdeiasMode === 'table' ? qualIdeiasTable() : qualIdeiasKanban()}</div>
-  `;
-}
-function updateQualIdeiasResults() {
-  const el = document.getElementById('qIdeiasResults');
-  if (!el) return;
-  el.innerHTML = UI.qualIdeiasMode === 'table' ? qualIdeiasTable() : qualIdeiasKanban();
-  lucide.createIcons();
-}
-function qualFiltered() {
-  const q = normalizeTxt(UI.qualSearch || '');
-  if (!q) return DB.ideias;
-  return DB.ideias.filter(i => normalizeTxt(i.protocolo + ' ' + i.titulo + ' ' + i.colaborador.nome + ' ' + i.area).includes(q));
-}
-function qualIdeiasTable() {
-  const list = qualFiltered();
-  return `
-  <div class="panel"><div class="panel-body table-wrap">
-    <table class="data-table">
-      <thead><tr><th>Protocolo</th><th>Título</th><th>Colaborador</th><th>Área</th><th>Categoria</th><th>Prioridade</th><th>Status</th><th></th></tr></thead>
-      <tbody>
-        ${list.map(i => `
-          <tr>
-            <td class="mono">${i.protocolo}</td>
-            <td style="max-width:220px">${esc(i.titulo)}</td>
-            <td>${esc(i.colaborador.nome)}</td>
-            <td>${esc(i.area)}</td>
-            <td>${badgeCategoria(i.categoria)}</td>
-            <td>${badgePrioridade(i.prioridade)}</td>
-            <td>${badgeStatus(i.status)}</td>
-            <td><button class="link-btn" onclick="openIdeaDrawerQual('${i.id}')">Abrir</button></td>
-          </tr>`).join('') || `<tr><td colspan="8"><div class="empty-state">${icon('search-x')}<div class="t">Nenhum resultado</div></div></td></tr>`}
-      </tbody>
-    </table>
-  </div></div>`;
-}
-function qualIdeiasKanban() {
-  return `
-  <div class="panel"><div class="panel-body">
-    <p style="font-size:12px;color:var(--text-muted);margin:0 0 12px">Os cartões avançam automaticamente conforme o fluxo oficial — movimentações manuais fora da regra de negócio são bloqueadas.</p>
-    <div class="kanban-scroll">
-      ${KANBAN_COLUMNS.map(col => {
-        const items = DB.ideias.filter(i => i.status === col.key);
-        return `<div class="kanban-col">
-          <div class="kanban-col-head"><span class="t">${col.label}</span><span class="n">${items.length}</span></div>
-          ${items.map(i => `
-            <div class="kanban-card" onclick="openIdeaDrawerQual('${i.id}')">
-              <div class="p">${i.protocolo}</div>
-              <div class="t">${esc(i.titulo)}</div>
-              ${badgePrioridade(i.prioridade)}
-            </div>`).join('') || `<div class="kanban-empty">Vazio</div>`}
-        </div>`;
-      }).join('')}
-    </div>
-  </div></div>`;
-}
+/* ======================= DASHBOARD (com drill-down) ======================= */
+function renderDashboard(){
+  renderQualidadeTip();
+  document.getElementById('kpiTotalCampanhas').textContent = campaigns.length;
+  document.getElementById('kpiAndamento').textContent = campaigns.filter(c=>c.status==="andamento").length;
+  document.getElementById('kpiProgramadas').textContent = campaigns.filter(c=>c.status==="programada").length;
+  const latest = campaigns[0];
+  document.getElementById('kpiParticipantes').textContent = campaignParticipants(latest.id).length;
+  document.getElementById('kpiElegiveis').textContent = evaluateEligibility(latest.id).eligible.length;
+  const ganhadores = campaigns.filter(c=>c.ganhadores).reduce((a,c)=>a+c.ganhadores.length,0);
+  document.getElementById('kpiGanhadores').textContent = ganhadores;
 
-function openIdeaDrawerQual(id) {
-  const i = DB.ideias.find(x => x.id === id);
-  const sims = findSimilar(i.titulo, i.id);
-  let acaoHtml = '';
-  if (i.status === 'recebida') acaoHtml = `<button class="btn btn-primary btn-block" onclick="qualAgendarReuniaoModal('${i.id}')">${icon('calendar-plus')} Agendar Reunião do Comitê</button>`;
-  else if (i.status === 'aguardando_reuniao') acaoHtml = `<button class="btn btn-primary btn-block" onclick="qualIniciarAnalise('${i.id}')">${icon('play')} Iniciar análise do Comitê</button>`;
-  else if (i.status === 'aguardando_decisao') acaoHtml = `<button class="btn btn-primary btn-block" onclick="qualDecisaoModal('${i.id}')">${icon('scale')} Registrar Decisão Oficial</button>`;
-  else if (i.cartaId) acaoHtml = `<button class="btn btn-primary btn-block" onclick="openCartaDrawer('${i.cartaId}')">${icon('mail')} Abrir Carta</button>`;
-  else if (i.status === 'enviada') acaoHtml = `<button class="btn btn-primary btn-block" onclick="qualReceberIdeia('${i.id}')">${icon('inbox')} Confirmar Recebimento</button>`;
+  const barsEl = document.getElementById('chartParticipacao');
+  const maxCount = Math.max(...campaigns.map(c=>campaignParticipants(c.id).length), 1);
+  barsEl.innerHTML = campaigns.map(c=>{
+    const n = campaignParticipants(c.id).length;
+    const h = Math.max(8, Math.round((n/maxCount)*130));
+    const shortName = c.nome.split('–')[0].trim();
+    return `<div class="bar-col"><div class="bar-value">${n}</div><div class="bar-shell"><div class="bar-fill" style="height:0px" data-h="${h}"></div></div><div class="bar-label">${shortName}</div></div>`;
+  }).join('');
+  requestAnimationFrame(()=> document.querySelectorAll('#chartParticipacao .bar-fill').forEach(el=> el.style.height = el.dataset.h + "px"));
 
-  acaoHtml += `
-    ${i.planoId ? `<button class="btn btn-outline btn-block" style="margin-top:8px" onclick="openPlanoDrawer('${i.planoId}')">${icon('rocket')} Ver Plano de Implantação</button>` : ''}
-    ${(i.status === 'carta_enviada' && i.decisao === 'aprovada' && !i.planoId) ? `<button class="btn btn-outline btn-block" style="margin-top:8px" onclick="qualCriarPlanoModal('${i.id}')">${icon('rocket')} Criar Plano de Implantação</button>` : ''}`;
+  const ref = campaigns.find(c=>c.status==="encerrada") || campaigns[0];
+  const refP = campaignParticipants(ref.id);
+  const p100 = refP.filter(p=>p.pct===100).length, p90 = refP.filter(p=>p.pct===90).length, p80 = refP.filter(p=>p.pct===80).length;
+  const pOther = refP.length - p100 - p90 - p80;
+  const total = refP.length || 1;
+  const seg = [{v:p100,c:"var(--success)",label:"100%"},{v:p90,c:"var(--primary)",label:"90%"},{v:p80,c:"var(--warning)",label:"80%"},{v:pOther,c:"var(--error)",label:"≤70%"}];
+  let acc = 0;
+  const stops = seg.map(s=>{const start=acc/total*360; acc+=s.v; const end=acc/total*360; return `${s.c} ${start}deg ${end}deg`;}).join(', ');
+  document.getElementById('chartDonut').innerHTML = `
+    <div style="width:130px;height:130px;border-radius:50%; background:conic-gradient(${stops}); display:flex; align-items:center; justify-content:center;">
+      <div style="width:78px;height:78px;border-radius:50%; background:var(--card); display:flex; flex-direction:column; align-items:center; justify-content:center;">
+        <div style="font-family:'Manrope'; font-weight:800; font-size:18px; color:var(--secondary);">${total}</div><div style="font-size:10px; color:var(--ink-soft);">respostas</div>
+      </div></div>
+    <div class="donut-legend">${seg.map(s=>`<div><span class="legend-dot" style="background:${s.c}"></span>${s.label} — ${s.v}</div>`).join('')}</div>`;
 
-  openDrawer(`
-    <div class="drawer-head"><div><h2>${esc(i.titulo)}</h2><div class="p">${i.protocolo}</div></div><button class="drawer-close" onclick="closeDrawer()">${icon('x')}</button></div>
-    <div class="drawer-body">
-      ${signalProgress(i.status)}
-      <div class="section-title">Colaborador</div>
-      <div class="kv-grid">
-        <div class="kv"><div class="k">Nome</div><div class="v">${esc(i.colaborador.nome)}</div></div>
-        <div class="kv"><div class="k">Matrícula</div><div class="v">${esc(i.colaborador.matricula)}</div></div>
-        <div class="kv"><div class="k">Setor</div><div class="v">${esc(i.colaborador.setor)}</div></div>
-        <div class="kv"><div class="k">Área</div><div class="v">${esc(i.area)}</div></div>
+  const allWinners = campaigns.filter(c=>c.ganhadores).flatMap(c=>c.ganhadores);
+  renderHBarChart('chartSetor', allWinners, 'setor', SETORES.filter(s=> allWinners.some(w=>w.setor===s)).length ? [...new Set(allWinners.map(w=>w.setor))] : SETORES.slice(0,8));
+  renderHBarChart('chartFilial', allWinners, 'filial', UNIDADES);
+
+  document.getElementById('tblUltimasCampanhas').innerHTML = campaigns.map(c=>{
+    const n = campaignParticipants(c.id).length;
+    return `<tr><td>${c.nome}</td><td>${c.inicio.replace('T',' ')} – ${c.fim.replace('T',' ')}</td><td>${n}</td><td>${statusBadge(c.status)}</td></tr>`;
+  }).join('');
+}
+function renderHBarChart(elId, winners, field, universe){
+  const counts = {}; universe.forEach(u=>counts[u]=0);
+  winners.forEach(w=>{ counts[w[field]] = (counts[w[field]]||0) + 1; });
+  const max = Math.max(...Object.values(counts), 1);
+  const el = document.getElementById(elId);
+  el.innerHTML = Object.entries(counts).map(([k,v],idx)=>{
+    const rowId = elId + "_row" + idx;
+    const names = winners.filter(w=>w[field]===k).map(w=>`${w.nome} · ${w.funcao||''}`);
+    return `<div>
+      <div class="hbar-row clickable" onclick="toggleHbarDetail('${rowId}')">
+        <div class="hbar-label">${k}</div>
+        <div class="hbar-track"><div class="hbar-fill" style="width:0%" data-w="${(v/max*100)}"></div></div>
+        <div class="hbar-value">${v}</div>
       </div>
-      <div class="section-title">Descrição</div>
-      <div class="desc-box">${esc(i.descricao)}</div>
-      <div class="section-title">Benefício esperado</div>
-      <div class="desc-box">${esc(i.beneficio)}</div>
-      ${i.estimativa.anual ? `<div class="section-title">Estimativa financeira</div><div class="kv-grid"><div class="kv"><div class="k">Mensal</div><div class="v">${fmtMoney(i.estimativa.mensal)}</div></div><div class="kv"><div class="k">Anual</div><div class="v">${fmtMoney(i.estimativa.anual)}</div></div></div>` : ''}
-      ${i.parecerComite ? `<div class="section-title">Parecer do Comitê</div><div class="desc-box">${i.parecerComite.resultado === 'favoravel' ? '✅ Favorável' : '❌ Desfavorável'} — ${esc(i.parecerComite.justificativa)}</div>` : ''}
-      ${i.decisaoQualidade ? `<div class="section-title">Decisão Oficial</div><div class="desc-box">${i.decisaoQualidade.resultado === 'aprovada' ? '✅ Aprovada' : '❌ Reprovada'} — ${esc(i.decisaoQualidade.justificativa)}</div>` : ''}
-      ${sims.length ? `<div class="section-title">Ideias semelhantes</div>${similaresHtml(sims)}` : ''}
-      <div class="section-title">Histórico completo</div>
-      <div class="hist-list">${i.historico.slice().reverse().map(h => `<div class="hist-item"><div class="t">${fmtDateTime(h.data)}</div><div class="e">${esc(h.evento)}</div></div>`).join('')}</div>
-      <div class="section-title">Ações</div>
-      ${acaoHtml}
-    </div>`);
+      <div class="hbar-detail" id="${rowId}">${names.length ? names.map(n=>`<span>${n}</span>`).join('') : 'Nenhum ganhador ainda neste grupo.'}</div>
+    </div>`;
+  }).join('');
+  requestAnimationFrame(()=> el.querySelectorAll('.hbar-fill').forEach(f=> f.style.width = f.dataset.w + "%"));
 }
-function qualReceberIdeia(id) {
-  const i = DB.ideias.find(x => x.id === id);
-  i.status = 'recebida'; addHistorico(i, 'Qualidade confirmou o recebimento.'); addAudit(SESSION.user.nome, `Confirmou recebimento de ${i.protocolo}.`);
-  addNotif('colaborador', `Sua ideia ${i.protocolo} foi recebida pela Qualidade.`, 'inbox');
-  closeDrawer(); toast('Recebimento confirmado.'); refresh();
-}
-function qualAgendarReuniaoModal(id) {
-  const i = DB.ideias.find(x => x.id === id);
-  const abertas = DB.reunioes.filter(r => r.status === 'agendada');
-  openModal(`
-    <h3>Agendar reunião do Comitê</h3>
-    <p class="sub">Ideia ${i.protocolo} — ${esc(i.titulo)}</p>
-    <div class="field"><label>Reunião</label>
-      <select id="reuniaoSelect">
-        ${abertas.map(r => `<option value="${r.id}">${r.codigo} — ${fmtDate(r.data)} às ${r.hora}</option>`).join('')}
-        <option value="__nova__">+ Criar nova reunião</option>
-      </select>
-    </div>
-    <div class="modal-actions"><button class="btn btn-outline" onclick="closeModal()">Cancelar</button><button class="btn btn-primary" onclick="confirmarAgendamento('${i.id}')">Agendar</button></div>
-  `);
-}
-function confirmarAgendamento(ideaId) {
-  const i = DB.ideias.find(x => x.id === ideaId);
-  const sel = document.getElementById('reuniaoSelect').value;
-  let reuniao;
-  if (sel === '__nova__') {
-    reuniao = { id: uid('R'), codigo: `COM-2026-0${DB.reunioes.length + 15}`, data: '2026-08-17', hora: '09:00', local: 'Sala de Reuniões 1', participantes: ['Rafael Nunes', 'Fernanda Dias', 'Carlos Prado'], pauta: [], ata: null, status: 'agendada' };
-    DB.reunioes.push(reuniao);
-  } else { reuniao = DB.reunioes.find(r => r.id === sel); }
-  reuniao.pauta.push(i.id);
-  i.reuniaoId = reuniao.id; i.status = 'aguardando_reuniao';
-  addHistorico(i, `Reunião ${reuniao.codigo} agendada.`);
-  addAudit(SESSION.user.nome, `Agendou reunião ${reuniao.codigo} para ${i.protocolo}.`);
-  closeModal(); closeDrawer(); toast('Reunião agendada com sucesso.'); refresh();
-}
-function qualIniciarAnalise(id) {
-  const i = DB.ideias.find(x => x.id === id);
-  i.status = 'em_analise_comite';
-  addHistorico(i, 'Ideia liberada para análise do Comitê.');
-  addAudit(SESSION.user.nome, `Liberou ${i.protocolo} para análise do Comitê.`);
-  addNotif('comite', `Nova ideia na pauta de análise: ${i.protocolo}.`, 'list-plus');
-  closeDrawer(); toast('Ideia liberada para o Comitê.'); refresh();
-}
-function qualDecisaoModal(id) {
-  const i = DB.ideias.find(x => x.id === id);
-  openModal(`
-    <h3>Decisão Oficial</h3>
-    <p class="sub">${i.protocolo} — ${esc(i.titulo)}</p>
-    ${i.parecerComite ? `<div class="desc-box" style="margin-bottom:14px;font-size:12.5px">Parecer do Comitê: ${i.parecerComite.resultado === 'favoravel' ? '✅ Favorável' : '❌ Desfavorável'} — ${esc(i.parecerComite.justificativa)}</div>` : ''}
-    <div class="radio-cards">
-      <label class="radio-card" id="decAprova"><input type="radio" name="decisao" value="aprovada" onchange="setDecisaoChoice('aprovada')"><span class="t">Aprovar</span></label>
-      <label class="radio-card" id="decReprova"><input type="radio" name="decisao" value="reprovada" onchange="setDecisaoChoice('reprovada')"><span class="t">Reprovar</span></label>
-    </div>
-    <div class="field" style="margin-top:14px"><label>Categoria da decisão</label>
-      <select id="decMotivo">
-        <option>Viabilidade técnica e financeira</option>
-        <option>Alto potencial de economia</option>
-        <option>Baixa viabilidade financeira</option>
-        <option>Risco de segurança não mitigado</option>
-        <option>Ideia duplicada</option>
-      </select>
-    </div>
-    <div class="field"><label>Justificativa</label><textarea id="decJustificativa"></textarea></div>
-    <div class="modal-actions"><button class="btn btn-outline" onclick="closeModal()">Cancelar</button><button class="btn btn-primary" onclick="submitDecisao('${i.id}')">Confirmar decisão</button></div>
-  `);
-}
-function setDecisaoChoice(v) {
-  document.getElementById('decAprova').classList.toggle('checked', v === 'aprovada');
-  document.getElementById('decReprova').classList.toggle('checked', v === 'reprovada');
-}
-function submitDecisao(id) {
-  const resultado = document.querySelector('input[name="decisao"]:checked');
-  const justificativa = document.getElementById('decJustificativa').value.trim();
-  if (!resultado) { toast('Selecione Aprovar ou Reprovar.'); return; }
-  if (!justificativa) { toast('Preencha a justificativa.'); return; }
-  const i = DB.ideias.find(x => x.id === id);
-  i.decisaoQualidade = { resultado: resultado.value, justificativa, motivo: document.getElementById('decMotivo').value, data: new Date().toISOString() };
-  i.decisao = resultado.value;
-  i.status = 'carta_elaboracao';
-  addHistorico(i, `Qualidade ${resultado.value === 'aprovada' ? 'aprovou' : 'reprovou'} oficialmente.`);
-  addAudit(SESSION.user.nome, `Registrou decisão oficial (${resultado.value}) para ${i.protocolo}.`);
-  criarCartaParaIdeia(i, resultado.value === 'reprovada');
-  addNotif('colaborador', `A decisão oficial sobre a ideia ${i.protocolo} foi registrada.`, 'scale');
-  closeModal(); closeDrawer(); toast('Decisão registrada. Uma carta foi gerada automaticamente.'); refresh();
-}
+window.toggleHbarDetail = function(id){ document.getElementById(id).classList.toggle('open'); };
 
-// ---------------- Comitê / Agenda (visão da Qualidade) ----------------
-function renderQualComite() {
-  return `
-  <div class="panel">
-    <div class="panel-head"><h3>Agenda do Comitê</h3><button class="btn btn-primary btn-sm" onclick="novaReuniaoModal()">${icon('plus')} Nova reunião</button></div>
-    <div class="panel-body table-wrap">
-      <table class="data-table">
-        <thead><tr><th>Código</th><th>Data</th><th>Local</th><th>Pauta</th><th>Status</th><th></th></tr></thead>
-        <tbody>
-          ${DB.reunioes.map(r => `
-            <tr>
-              <td class="mono">${r.codigo}</td>
-              <td>${fmtDate(r.data)} · ${r.hora}</td>
-              <td>${esc(r.local)}</td>
-              <td>${r.pauta.length} ideia(s)</td>
-              <td>${r.status === 'agendada' ? '<span class="badge badge-warning">Agendada</span>' : '<span class="badge badge-success">Realizada</span>'}</td>
-              <td>${r.status === 'agendada' ? `<button class="link-btn" onclick="registrarAtaModal('${r.id}')">Registrar ata</button>` : `<button class="link-btn" onclick="verAta('${r.id}')">Ver ata</button>`}</td>
-            </tr>`).join('')}
-        </tbody>
-      </table>
-    </div>
-  </div>`;
-}
-function novaReuniaoModal() {
-  openModal(`
-    <h3>Nova reunião do Comitê</h3>
-    <div class="field"><label>Data</label><input type="date" id="nrData" value="2026-08-24"></div>
-    <div class="field"><label>Hora</label><input type="time" id="nrHora" value="09:00"></div>
-    <div class="field"><label>Local</label><input id="nrLocal" value="Sala de Reuniões 1"></div>
-    <div class="modal-actions"><button class="btn btn-outline" onclick="closeModal()">Cancelar</button><button class="btn btn-primary" onclick="criarReuniao()">Criar</button></div>
-  `);
-}
-function criarReuniao() {
-  const r = { id: uid('R'), codigo: `COM-2026-0${DB.reunioes.length + 15}`, data: document.getElementById('nrData').value, hora: document.getElementById('nrHora').value, local: document.getElementById('nrLocal').value, participantes: ['Rafael Nunes', 'Fernanda Dias', 'Carlos Prado'], pauta: [], ata: null, status: 'agendada' };
-  DB.reunioes.push(r); addAudit(SESSION.user.nome, `Criou reunião ${r.codigo}.`); addNotif('comite', `Reunião ${r.codigo} agendada para ${fmtDate(r.data)}.`, 'calendar');
-  closeModal(); toast('Reunião criada.'); refresh();
-}
-function registrarAtaModal(id) {
-  openModal(`<h3>Registrar ata</h3><div class="field"><label>Conclusões da reunião</label><textarea id="ataTexto" placeholder="Descreva o que foi discutido e decidido..."></textarea></div>
-  <div class="modal-actions"><button class="btn btn-outline" onclick="closeModal()">Cancelar</button><button class="btn btn-primary" onclick="salvarAta('${id}')">Salvar ata</button></div>`);
-}
-function salvarAta(id) {
-  const r = DB.reunioes.find(x => x.id === id);
-  r.ata = document.getElementById('ataTexto').value.trim() || 'Reunião realizada sem observações adicionais.';
-  r.status = 'realizada';
-  addAudit(SESSION.user.nome, `Registrou ata da reunião ${r.codigo}.`);
-  addNotif('comite', `Ata da reunião ${r.codigo} disponível.`, 'file-text');
-  closeModal(); toast('Ata registrada e vinculada permanentemente.'); refresh();
-}
+/* Drill-down dos KPIs do dashboard */
+window.goToRodadas = function(){ document.querySelector('[data-target="campanhas"]').click(); };
+window.goToResultadosLatest = function(){ goToParticipants(campaigns[0].id); };
+window.goToElegiveisLatest = function(){
+  document.querySelector('[data-target="elegiveis"]').click();
+  document.getElementById('selectCampanhaElegiveis').value = campaigns[0].id;
+  renderEligibleTable();
+};
+window.goToHistoricoAdmin = function(){ document.querySelector('[data-target="historico"]').click(); };
 
-// ---------------- Cartas ----------------
-function renderQualCartas() {
-  const list = DB.cartas.map(c => ({ c, idea: DB.ideias.find(i => i.id === c.ideiaId) })).filter(x => x.idea);
-  return `
-  <div class="panel"><div class="panel-body table-wrap">
-    <table class="data-table">
-      <thead><tr><th>Protocolo</th><th>Tipo</th><th>Versão</th><th>Status</th><th>Responsável</th><th></th></tr></thead>
-      <tbody>
-        ${list.map(({ c, idea }) => `
-          <tr>
-            <td class="mono">${idea.protocolo}</td>
-            <td>${c.tipo === 'aprovacao' ? '<span class="badge badge-success">Aprovação</span>' : '<span class="badge badge-error">Reprovação</span>'}</td>
-            <td>v${c.versao}</td>
-            <td>${badgeStatus(idea.status)}</td>
-            <td>${esc(c.responsavelRedacao)}</td>
-            <td><button class="link-btn" onclick="openCartaDrawer('${c.id}')">Abrir</button></td>
-          </tr>`).join('') || `<tr><td colspan="6"><div class="empty-state">${icon('mail')}<div class="t">Nenhuma carta criada ainda</div></div></td></tr>`}
-      </tbody>
-    </table>
-  </div></div>`;
+/* ======================= CAMPANHAS / RODADAS (Qualidade) ======================= */
+function renderCampaignGrid(){
+  document.getElementById('campaignGrid').innerHTML = campaigns.map(c=>{
+    const n = campaignParticipants(c.id).length;
+    const {eligible} = evaluateEligibility(c.id);
+    return `<div class="ccard">
+      <div style="display:flex; justify-content:space-between; align-items:flex-start;"><h4>${c.nome}</h4>${statusBadge(c.status)}</div>
+      <div class="desc">${c.descricao}</div>
+      <div class="meta">
+        <span>📅 ${c.inicio.replace('T',' ')} → ${c.fim.replace('T',' ')}</span>
+        <span>📝 ${c.questoes ? c.questoes.length : '—'} perguntas · 🏆 ${c.qtdGanhadores} ganhadores</span>
+        <span>👥 ${n} participantes · ✅ ${eligible.length} elegíveis</span>
+      </div>
+      <div class="actions">
+        <button class="btn btn-ghost btn-sm" onclick="goToParticipants('${c.id}')">Ver participantes</button>
+        <button class="btn btn-outline btn-sm" onclick="loadCampaignForEdit('${c.id}')">Editar</button>
+        <button class="btn btn-outline btn-sm" onclick="openShareModal('${c.id}')">🔗 Compartilhar</button>
+      </div>
+    </div>`;
+  }).join('') || `<p style="color:var(--ink-soft); font-size:13px;">Nenhuma campanha cadastrada.</p>`;
 }
-function openCartaDrawer(cartaId) {
-  const c = DB.cartas.find(x => x.id === cartaId);
-  const idea = DB.ideias.find(i => i.id === c.ideiaId);
-  const canEditContent = SESSION.role === 'qualidade' && idea.status === 'carta_elaboracao';
-  let acoes = '';
-  if (SESSION.role === 'qualidade') {
-    if (idea.status === 'carta_elaboracao') acoes = `<button class="btn btn-primary btn-block" onclick="qualEnviarParaAnalista('${c.id}')">${icon('send')} Enviar para Analista</button>`;
-    else if (idea.status === 'carta_pronta') acoes = `<button class="btn btn-primary btn-block" onclick="qualEnviarCartaFinal('${c.id}')">${icon('mail-check')} Enviar Carta ao Colaborador</button>`;
+window.goToParticipants = function(id){
+  document.querySelectorAll('.menu-item').forEach(b=>b.classList.remove('active'));
+  const btn = document.querySelector('[data-target="participantes"]'); if(btn) btn.classList.add('active');
+  goToSection('participantes');
+  document.getElementById('selectCampanhaParticipantes').value = id;
+  renderParticipantsTable();
+};
+
+/* ======================= PARTICIPANTES / RESULTADOS ======================= */
+function renderParticipantsTable(){
+  const sel = document.getElementById('selectCampanhaParticipantes');
+  const id = sel.value;
+  const list = campaignParticipants(id).sort((a,b)=>b.pct-a.pct);
+  document.getElementById('tblParticipantes').innerHTML = list.map(p=>`
+    <tr><td>${p.nome}</td><td>${p.matricula}</td><td>${p.cargo}</td><td>${p.setor}</td><td>${p.filial}</td><td>${fmtDateTime(p.data)}</td><td><span class="${p.pct===100?'pct100':'pctless'}">${p.pct}%</span></td></tr>`).join('') ||
+    `<tr><td colspan="7" style="text-align:center; color:var(--ink-soft); padding:20px;">Nenhum participante ainda.</td></tr>`;
+  const media = list.length ? Math.round(list.reduce((a,p)=>a+p.pct,0)/list.length) : 0;
+  const {eligible} = evaluateEligibility(id);
+  document.getElementById('participantesStats').innerHTML = `
+    <div class="stat"><b>${list.length}</b><span>Total de participantes</span></div>
+    <div class="stat"><b>${eligible.length}</b><span>Total de elegíveis</span></div>
+    <div class="stat"><b>${media}%</b><span>Média geral de acertos</span></div>`;
+
+  const c = campaigns.find(x=>x.id===id);
+  const qs = (c && c.questoes) || [];
+  const stats = qs.map((q,idx)=>{
+    const answered = list.filter(p=>p.respostasCorretas);
+    const withData = answered.length ? answered : null;
+    let pctCorrect;
+    if(withData){
+      pctCorrect = Math.round(withData.filter(p=>p.respostasCorretas[idx]).length / withData.length * 100);
+    } else {
+      pctCorrect = q._mockAcerto !== undefined ? q._mockAcerto : (55 + Math.floor(Math.random()*35));
+      q._mockAcerto = pctCorrect;
+    }
+    return {texto:q.texto, pct:pctCorrect};
+  });
+  const asc = [...stats].sort((a,b)=>a.pct-b.pct), desc = [...stats].sort((a,b)=>b.pct-a.pct);
+  document.getElementById('questoesErro').innerHTML = asc.slice(0,3).map(s=>`<div class="hbar-row"><div class="hbar-label" style="width:auto; flex:1; white-space:normal;">${s.texto}</div><div class="hbar-value" style="color:var(--error); width:40px;">${s.pct}%</div></div>`).join('') || '<p class="hint">Sem dados.</p>';
+  document.getElementById('questoesAcerto').innerHTML = desc.slice(0,3).map(s=>`<div class="hbar-row"><div class="hbar-label" style="width:auto; flex:1; white-space:normal;">${s.texto}</div><div class="hbar-value" style="color:var(--success); width:40px;">${s.pct}%</div></div>`).join('') || '<p class="hint">Sem dados.</p>';
+}
+document.getElementById('selectCampanhaParticipantes').addEventListener('change', renderParticipantsTable);
+
+/* ======================= ELEGÍVEIS ======================= */
+function renderEligibleTable(){
+  const id = document.getElementById('selectCampanhaElegiveis').value;
+  const {eligible, excluded} = evaluateEligibility(id);
+  document.getElementById('tblElegiveis').innerHTML = eligible.map((p,i)=>`<tr><td>${i+1}</td><td>${p.nome}</td><td>${p.matricula}</td><td>${p.cargo}</td><td>${p.setor}</td><td>${p.filial}</td><td>${fmtDateTime(p.data)}</td></tr>`).join('') ||
+    `<tr><td colspan="7" style="text-align:center; color:var(--ink-soft); padding:20px;">Nenhum colaborador elegível nesta campanha.</td></tr>`;
+  document.getElementById('tblExcluidos').innerHTML = excluded.map(p=>`<tr><td>${p.nome}</td><td>${p.matricula}</td><td>${p.cargo}</td><td>${p.setor}</td><td><span class="badge excluido">${p.motivo}</span></td></tr>`).join('') ||
+    `<tr><td colspan="5" style="text-align:center; color:var(--ink-soft); padding:20px;">Nenhuma exclusão automática nesta campanha.</td></tr>`;
+}
+document.getElementById('selectCampanhaElegiveis').addEventListener('change', renderEligibleTable);
+
+/* ======================= COMPARTILHAMENTO (LINK + QR CODE) ======================= */
+window.openShareModal = function(campaignId){
+  const c = campaigns.find(x=>x.id===campaignId);
+  if(!c) return;
+  const link = `${window.location.origin}${window.location.pathname}?campanha=${campaignId}`;
+  const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(link)}`;
+  const backdrop = document.createElement('div');
+  backdrop.className = "share-backdrop";
+  backdrop.id = "shareBackdrop";
+  backdrop.innerHTML = `
+    <div class="share-card">
+      <h3>Divulgar campanha</h3>
+      <p>${c.nome}</p>
+      <div class="share-qr"><img src="${qrUrl}" alt="QR Code de acesso à campanha" onerror="this.parentElement.innerHTML='<span style=\\'font-size:11px;color:var(--ink-soft);padding:12px;\\'>QR indisponível sem conexão à internet</span>'"></div>
+      <div class="share-link-box">
+        <input type="text" id="shareLinkInput" value="${link}" readonly>
+        <button class="btn btn-primary btn-sm" id="btnCopyShareLink">Copiar</button>
+      </div>
+      <p class="hint" style="margin-bottom:16px;">Compartilhe este link ou o QR Code por e-mail, WhatsApp ou impresso — ao abrir, o colaborador faz login e já cai direto no questionário.</p>
+      <div class="share-actions"><button class="btn btn-outline" id="btnCloseShare">Fechar</button></div>
+    </div>`;
+  document.body.appendChild(backdrop);
+  backdrop.addEventListener('click', (e)=>{ if(e.target === backdrop) closeShareModal(); });
+  document.getElementById('btnCloseShare').addEventListener('click', closeShareModal);
+  document.getElementById('btnCopyShareLink').addEventListener('click', ()=>{
+    const input = document.getElementById('shareLinkInput');
+    input.select();
+    navigator.clipboard && navigator.clipboard.writeText(input.value).then(()=>{
+      showToast("Link copiado para a área de transferência.","success");
+    }).catch(()=>{
+      document.execCommand('copy');
+      showToast("Link copiado.","success");
+    });
+  });
+  logAction("Campanha divulgada", `Link/QR gerado para ${c.nome}`);
+};
+window.closeShareModal = function(){
+  const el = document.getElementById('shareBackdrop');
+  if(el) el.remove();
+};
+
+
+let questionCounter = 0;
+function createQuestionCard(qData){
+  questionCounter++;
+  const qid = "q" + questionCounter;
+  const wrap = document.createElement('div');
+  wrap.className = "qcard"; wrap.id = qid;
+  const type = (qData && qData.type) || "unica";
+  const texto = (qData && qData.texto) || "";
+  const options = (qData && qData.options) || [{text:"",correct:false},{text:"",correct:false},{text:"",correct:false},{text:"",correct:false}];
+  wrap.innerHTML = `
+    <div class="qcard-head"><b>Pergunta</b><button type="button" class="remove-q" onclick="document.getElementById('${qid}').remove()">Remover</button></div>
+    <div class="form-grid">
+      <div class="field full"><label>Enunciado</label><input type="text" class="q-text" placeholder="Digite a pergunta" value="${texto.replace(/"/g,'&quot;')}"></div>
+      <div class="field"><label>Tipo de pergunta</label>
+        <select class="q-type" onchange="toggleQuestionType('${qid}', this.value)">
+          <option value="unica" ${type==='unica'?'selected':''}>Resposta única</option>
+          <option value="multipla" ${type==='multipla'?'selected':''}>Múltipla escolha</option>
+          <option value="multiplas_respostas" ${type==='multiplas_respostas'?'selected':''}>Resposta múltipla</option>
+          <option value="vf" ${type==='vf'?'selected':''}>Verdadeiro ou falso</option>
+        </select>
+      </div>
+      <div class="field"><label>Anexo / imagem (opcional)</label><input type="file" accept="image/*" class="q-file"></div>
+      <div class="field full q-options-wrap">
+        <label>Alternativas — marque a(s) correta(s)</label>
+        <div class="opt-hint">O sistema usa a marcação abaixo como gabarito oficial para corrigir automaticamente.</div>
+        <div class="q-options"></div>
+      </div>
+    </div>`;
+  document.getElementById('questionList').appendChild(wrap);
+  renderOptionsFor(qid, type, options);
+}
+function renderOptionsFor(qid, type, options){
+  const card = document.getElementById(qid);
+  const opts = card.querySelector('.q-options');
+  if(type === 'vf'){
+    const vTrue = options[0] ? options[0].correct : true;
+    opts.innerHTML = `
+      <div class="opt-row"><input type="radio" name="${qid}-vf" class="q-correct-vf" value="0" ${vTrue?'checked':''}><span style="font-size:13px;">Verdadeiro</span></div>
+      <div class="opt-row"><input type="radio" name="${qid}-vf" class="q-correct-vf" value="1" ${!vTrue?'checked':''}><span style="font-size:13px;">Falso</span></div>`;
+  } else {
+    const inputType = type === 'multiplas_respostas' ? 'checkbox' : 'radio';
+    const nameAttr = inputType === 'radio' ? `name="${qid}-radio"` : "";
+    opts.innerHTML = options.map((o,i)=>`
+      <div class="opt-row"><input type="${inputType}" ${nameAttr} class="q-correct" ${o.correct?'checked':''}><input type="text" class="q-opt-text" placeholder="Alternativa ${i+1}" value="${(o.text||"").replace(/"/g,'&quot;')}"></div>`).join('');
   }
-  openDrawer(`
-    <div class="drawer-head"><div><h2>Carta — ${idea.protocolo}</h2><div class="p">${c.tipo === 'aprovacao' ? 'Carta de Aprovação' : 'Carta de Reprovação'} · v${c.versao}</div></div><button class="drawer-close" onclick="closeDrawer()">${icon('x')}</button></div>
-    <div class="drawer-body">
-      <div class="section-title">Status atual</div>
-      ${badgeStatus(idea.status)}
-      <div class="section-title">Conteúdo da carta</div>
-      <textarea id="cartaConteudo" style="min-height:220px" ${canEditContent ? '' : 'readonly'}>${esc(c.conteudo)}</textarea>
-      ${canEditContent ? `<button class="btn btn-outline btn-sm" style="margin-top:8px" onclick="qualSalvarConteudo('${c.id}')">${icon('save')} Salvar rascunho</button>` : ''}
-
-      <div class="section-title">Histórico de versões</div>
-      <div class="hist-list">${c.historicoVersoes.slice().reverse().map(v => `<div class="hist-item"><div class="t">v${v.versao} · ${fmtDateTime(v.data)}</div><div class="e">${esc(v.evento)}</div></div>`).join('')}</div>
-
-      ${c.comentarios.length ? `<div class="section-title">Comentários de revisão</div>${c.comentarios.map(cm => `<div class="desc-box" style="margin-bottom:8px"><b>${esc(cm.autor)}</b> (v${cm.versao}): ${esc(cm.texto)}</div>`).join('')}` : ''}
-
-      <div class="section-title">Ações</div>
-      ${acoes || `<p style="font-size:12.5px;color:var(--text-muted)">Nenhuma ação disponível para o seu perfil neste momento.</p>`}
-    </div>`);
 }
-function qualSalvarConteudo(cartaId) {
-  const c = DB.cartas.find(x => x.id === cartaId);
-  c.conteudo = document.getElementById('cartaConteudo').value;
-  toast('Rascunho salvo.');
+window.toggleQuestionType = function(qid, type){
+  const blankOpts = type==='vf' ? [{text:"Verdadeiro",correct:true},{text:"Falso",correct:false}] : [{text:"",correct:false},{text:"",correct:false},{text:"",correct:false},{text:"",correct:false}];
+  renderOptionsFor(qid, type, blankOpts);
+};
+document.getElementById('btnAddQuestion').addEventListener('click', ()=> createQuestionCard());
+document.getElementById('btnResetForm').addEventListener('click', ()=>{
+  document.getElementById('formCampanha').reset();
+  document.getElementById('questionList').innerHTML = ""; questionCounter = 0;
+  createQuestionCard(); createQuestionCard();
+});
+createQuestionCard(); createQuestionCard();
+
+function collectQuestionsFromForm(){
+  const qCards = document.querySelectorAll('#questionList .qcard');
+  return Array.from(qCards).map(card=>{
+    const texto = card.querySelector('.q-text').value || "Pergunta sem enunciado";
+    const typeSel = card.querySelector('.q-type').value;
+    let options;
+    if(typeSel === 'vf'){
+      const checked = card.querySelector('.q-correct-vf:checked');
+      const isTrue = checked ? checked.value === "0" : true;
+      options = [opt("Verdadeiro", isTrue), opt("Falso", !isTrue)];
+    } else {
+      const rows = card.querySelectorAll('.q-options .opt-row');
+      options = Array.from(rows).map(r=>{
+        const txt = r.querySelector('.q-opt-text').value || "";
+        const chk = r.querySelector('.q-correct').checked;
+        return opt(txt, chk);
+      }).filter(o=>o.text.trim() !== "");
+    }
+    return {texto, type: typeSel, options};
+  });
 }
-function qualEnviarParaAnalista(cartaId) {
-  const c = DB.cartas.find(x => x.id === cartaId);
-  const idea = DB.ideias.find(i => i.id === c.ideiaId);
-  c.conteudo = document.getElementById('cartaConteudo').value;
-  idea.status = 'carta_analista'; c.status = 'carta_analista';
-  c.historicoVersoes.push({ versao: c.versao, evento: 'Carta enviada para a Analista.', data: new Date().toISOString() });
-  addHistorico(idea, 'Carta enviada para aprovação da Analista.');
-  addAudit(SESSION.user.nome, `Enviou carta de ${idea.protocolo} para a Analista.`);
-  addNotif('analista', `Nova carta para revisão: ${idea.protocolo}.`, 'mail-check');
-  closeDrawer(); toast('Carta enviada para a Analista.'); refresh();
+
+/* Reaproveitar pergunta do Banco de Perguntas dentro de Nova Campanha,
+   com alerta de reutilização (controle de repetição — regra 14) */
+function fillBQPicker(){
+  const sel = document.getElementById('bqPickerSelect');
+  if(!sel) return;
+  sel.innerHTML = questionBank.filter(q=>q.status==='ativa').map(q=>`<option value="${q.codigo}">${q.codigo} — ${q.texto.slice(0,55)}</option>`).join('');
 }
-function qualEnviarCartaFinal(cartaId) {
-  const c = DB.cartas.find(x => x.id === cartaId);
-  const idea = DB.ideias.find(i => i.id === c.ideiaId);
-  c.status = 'carta_enviada'; idea.status = 'carta_enviada';
-  c.historicoVersoes.push({ versao: c.versao, evento: 'Carta gerada em PDF, assinada e enviada ao colaborador.', data: new Date().toISOString() });
-  addHistorico(idea, 'Qualidade enviou a carta oficial ao colaborador.');
-  addAudit(SESSION.user.nome, `Enviou carta final de ${idea.protocolo}.`);
-  addNotif('colaborador', `A carta referente à ideia ${idea.protocolo} está disponível.`, 'mail-check');
-  if (idea.decisao === 'reprovada') {
-    idea.status = 'concluida';
-    addHistorico(idea, 'Processo encerrado (ideia reprovada).');
+const btnInserirDoBanco = document.getElementById('btnInserirDoBanco');
+if(btnInserirDoBanco){
+  btnInserirDoBanco.addEventListener('click', ()=>{
+    const sel = document.getElementById('bqPickerSelect');
+    const q = questionBank.find(x=>x.codigo===sel.value);
+    if(!q) return;
+    const u = bqUsageStatus(q);
+    if(u.cls === 'recente'){
+      showToast(`Atenção: esta pergunta foi ${u.label.toLowerCase()}. Você pode reutilizá-la mesmo assim, se necessário.`, "warning");
+    } else {
+      showToast("Pergunta inserida no questionário.","success");
+    }
+    createQuestionCard({texto:q.texto, type:q.type, options:q.options});
+    q.qtdUtilizacoes++; q.ultimaUtilizacao = new Date();
+    renderBanco();
+    logAction("Reutilização de pergunta do banco", `${q.codigo} inserida em nova campanha`);
+  });
+}
+
+/* ======================= NOVA CAMPANHA — SUBMIT (criar ou editar) ======================= */
+document.getElementById('formCampanha').addEventListener('submit', function(e){
+  e.preventDefault();
+  const f = new FormData(this);
+  const questoes = collectQuestionsFromForm();
+  const payload = {
+    nome: f.get('nome') || "Nova campanha PPG",
+    descricao: f.get('descricao') || "",
+    objetivo: f.get('objetivo') || "",
+    inicio: f.get('inicio'),
+    fim: f.get('fim'),
+    qtdGanhadores: Number(f.get('qtdGanhadores')) || 4,
+    premio: f.get('premio') || "",
+    criterios: f.get('criterios') || "Nenhum critério adicional definido.",
+    status: f.get('status') || "programada",
+    questoes: questoes.length ? questoes : [{texto:"Pergunta de exemplo", type:"unica", options:[opt("Sim",true),opt("Não")]}]
+  };
+
+  if(editingCampaignId){
+    const idx = campaigns.findIndex(c=>c.id===editingCampaignId);
+    if(idx > -1) campaigns[idx] = {...campaigns[idx], ...payload};
+    showToast("Campanha atualizada com sucesso!","success");
+    logAction("Campanha editada", payload.nome);
+    editingCampaignId = null;
+    document.getElementById('btnSubmitCampanha').textContent = "Cadastrar campanha";
+    document.getElementById('btnCancelEdit').style.display = "none";
+    document.getElementById('novaTitle').textContent = "Nova Campanha";
+  } else {
+    const id = "c" + (campaigns.length + 1) + "_" + Date.now().toString().slice(-4);
+    campaigns.unshift({id, ganhadores:null, ...payload});
+    showToast("Campanha e questionário cadastrados com sucesso!","success");
+    logAction("Nova campanha cadastrada", payload.nome);
   }
-  closeDrawer(); toast('Carta enviada ao colaborador.');
-  if (idea.decisao === 'aprovada' && !idea.planoId) {
-    setTimeout(() => qualCriarPlanoModal(idea.id, true), 250);
-  } else { refresh(); }
+  fillCampaignSelects();
+  renderCampaignGrid();
+  this.reset();
+  document.getElementById('questionList').innerHTML = ""; questionCounter = 0;
+  createQuestionCard(); createQuestionCard();
+  document.querySelector('[data-target="campanhas"]').click();
+});
+
+window.loadCampaignForEdit = function(id){
+  const c = campaigns.find(x=>x.id===id);
+  if(!c) return;
+  editingCampaignId = id;
+  const form = document.getElementById('formCampanha');
+  form.nome.value = c.nome; form.descricao.value = c.descricao || ""; form.objetivo.value = c.objetivo || "";
+  form.inicio.value = c.inicio; form.fim.value = c.fim;
+  form.qtdGanhadores.value = c.qtdGanhadores; form.status.value = c.status;
+  form.premio.value = c.premio || ""; form.criterios.value = c.criterios || "";
+  document.getElementById('questionList').innerHTML = ""; questionCounter = 0;
+  (c.questoes||[]).forEach(q=> createQuestionCard(q));
+  document.getElementById('btnSubmitCampanha').textContent = "Salvar alterações";
+  document.getElementById('btnCancelEdit').style.display = "inline-flex";
+  document.getElementById('novaTitle').textContent = "Editar Campanha";
+  document.querySelector('[data-target="nova"]').click();
+  showToast("Editando campanha — altere os campos e clique em Salvar alterações.","");
+};
+document.getElementById('btnCancelEdit').addEventListener('click', ()=>{
+  editingCampaignId = null;
+  document.getElementById('formCampanha').reset();
+  document.getElementById('questionList').innerHTML = ""; questionCounter = 0;
+  createQuestionCard(); createQuestionCard();
+  document.getElementById('btnSubmitCampanha').textContent = "Cadastrar campanha";
+  document.getElementById('btnCancelEdit').style.display = "none";
+  document.getElementById('novaTitle').textContent = "Nova Campanha";
+});
+
+/* ======================= BANCO DE PERGUNTAS (Qualidade) ======================= */
+function renderBanco(){
+  const tbody = document.getElementById('bqTableBody');
+  if(!tbody) return;
+  tbody.innerHTML = questionBank.map(q=>{
+    const u = bqUsageStatus(q);
+    return `<tr>
+      <td>${q.codigo}</td><td>${q.categoria}</td><td>${q.tema}</td><td>${q.procedimento||'—'}</td>
+      <td>${q.qtdUtilizacoes}x</td>
+      <td><span class="bq-badge ${u.cls}">${u.label}</span></td>
+      <td><span class="badge ${q.status==='ativa'?'finalizada':'excluido'}">${q.status==='ativa'?'Ativa':'Inativa'}</span></td>
+      <td style="display:flex; gap:6px;">
+        <button class="btn btn-outline btn-sm" onclick="editBQ('${q.codigo}')">Editar</button>
+        <button class="btn btn-outline btn-sm" onclick="deleteBQ('${q.codigo}')">Excluir</button>
+      </td>
+    </tr>`;
+  }).join('') || `<tr><td colspan="8" style="text-align:center; color:var(--ink-soft); padding:20px;">Nenhuma pergunta cadastrada no banco.</td></tr>`;
+  fillBQPicker();
+}
+function bqRenderOptions(type, options){
+  const wrap = document.getElementById('bqOptionsWrap');
+  if(!wrap) return;
+  options = options || (type==='vf' ? [{text:"Verdadeiro",correct:true},{text:"Falso",correct:false}] : [{text:"",correct:false},{text:"",correct:false},{text:"",correct:false},{text:"",correct:false}]);
+  if(type==='vf'){
+    wrap.innerHTML = `
+      <div class="opt-row"><input type="radio" name="bq-vf" class="bq-correct-vf" value="0" ${options[0] && options[0].correct?'checked':''}><span style="font-size:13px;">Verdadeiro</span></div>
+      <div class="opt-row"><input type="radio" name="bq-vf" class="bq-correct-vf" value="1" ${!(options[0] && options[0].correct)?'checked':''}><span style="font-size:13px;">Falso</span></div>`;
+  } else {
+    const inputType = type==='multiplas_respostas' ? 'checkbox' : 'radio';
+    const nameAttr = inputType==='radio' ? 'name="bq-radio"' : '';
+    wrap.innerHTML = options.map((o,i)=>`<div class="opt-row"><input type="${inputType}" ${nameAttr} class="bq-correct" ${o.correct?'checked':''}><input type="text" class="bq-opt-text" placeholder="Alternativa ${i+1}" value="${(o.text||'').replace(/"/g,'&quot;')}"></div>`).join('');
+  }
+}
+window.renderBQOptionInputs = function(type){ bqRenderOptions(type, null); };
+function collectBQOptions(){
+  const type = document.getElementById('bqTipo').value;
+  if(type==='vf'){
+    const checked = document.querySelector('.bq-correct-vf:checked');
+    const isTrue = checked ? checked.value==="0" : true;
+    return [opt("Verdadeiro", isTrue), opt("Falso", !isTrue)];
+  }
+  const rows = document.querySelectorAll('#bqOptionsWrap .opt-row');
+  return Array.from(rows).map(r=>opt(r.querySelector('.bq-opt-text').value||"", r.querySelector('.bq-correct').checked)).filter(o=>o.text.trim()!=="");
+}
+const bqForm = document.getElementById('bqForm');
+if(bqForm){
+  bqRenderOptions('unica', null);
+  bqForm.addEventListener('submit', function(e){
+    e.preventDefault();
+    const options = collectBQOptions();
+    const payload = {
+      categoria: document.getElementById('bqCategoria').value || "Geral",
+      tema: document.getElementById('bqTema').value || "",
+      procedimento: document.getElementById('bqProcedimento').value || "",
+      texto: document.getElementById('bqTexto').value || "Pergunta sem enunciado",
+      type: document.getElementById('bqTipo').value,
+      options: options.length ? options : [opt("Sim",true),opt("Não")],
+      status: document.getElementById('bqStatus').value
+    };
+    if(editingBQCodigo){
+      const idx = questionBank.findIndex(q=>q.codigo===editingBQCodigo);
+      if(idx>-1) questionBank[idx] = {...questionBank[idx], ...payload};
+      logAction("Edição de pergunta", `${editingBQCodigo} — ${payload.texto.slice(0,40)}`);
+      showToast("Pergunta atualizada.","success");
+    } else {
+      const codigo = "BQ-" + String(questionBank.length+1).padStart(3,'0');
+      questionBank.push({codigo, autor: currentUser.nome, dataCriacao:new Date(), ultimaUtilizacao:null, qtdUtilizacoes:0, ...payload});
+      logAction("Nova pergunta cadastrada", `${codigo} — ${payload.texto.slice(0,40)}`);
+      showToast("Pergunta cadastrada no banco.","success");
+    }
+    editingBQCodigo = null;
+    this.reset();
+    document.getElementById('bqCodigo').value = "";
+    bqRenderOptions('unica', null);
+    renderBanco();
+  });
+  document.getElementById('btnResetBQ').addEventListener('click', ()=>{
+    editingBQCodigo = null;
+    bqForm.reset();
+    document.getElementById('bqCodigo').value = "";
+    bqRenderOptions('unica', null);
+  });
+  document.getElementById('bqImportFile').addEventListener('change', function(e){
+    const file = e.target.files[0];
+    if(!file) return;
+    const reader = new FileReader();
+    reader.onload = function(evt){
+      try{
+        const data = new Uint8Array(evt.target.result);
+        const wb = XLSX.read(data, {type:'array'});
+        const sheet = wb.Sheets[wb.SheetNames[0]];
+        const rows = XLSX.utils.sheet_to_json(sheet, {defval:""});
+        let count = 0;
+        rows.forEach(r=>{
+          const opts = [1,2,3,4].map(i=>r['opcao'+i]).filter(v=>v!=="").map((t,i)=>opt(String(t), String(r.correta||"").split(',').map(s=>s.trim()).includes(String(i+1))));
+          questionBank.push({
+            codigo: r.codigo ? String(r.codigo) : ("BQ-"+String(questionBank.length+1).padStart(3,'0')),
+            categoria: r.categoria || "Importada", tema: r.tema || "", procedimento: r.procedimento || "",
+            texto: r.texto || r.pergunta || "Pergunta importada",
+            type: r.tipo || "unica", options: opts.length ? opts : [opt("Sim",true),opt("Não")],
+            autor: currentUser.nome, dataCriacao:new Date(), ultimaUtilizacao:null, qtdUtilizacoes:0, status:"ativa"
+          });
+          count++;
+        });
+        renderBanco();
+        logAction("Importação de perguntas", `${count} pergunta(s) via ${file.name}`);
+        showToast(`${count} pergunta(s) importada(s) com sucesso.`,"success");
+      }catch(err){
+        showToast("Não foi possível importar o arquivo. Verifique se é .xlsx ou .csv com as colunas esperadas.","warning");
+      }
+      e.target.value = "";
+    };
+    reader.readAsArrayBuffer(file);
+  });
+}
+window.editBQ = function(codigo){
+  const q = questionBank.find(x=>x.codigo===codigo);
+  if(!q) return;
+  editingBQCodigo = codigo;
+  document.getElementById('bqCodigo').value = q.codigo;
+  document.getElementById('bqCategoria').value = q.categoria;
+  document.getElementById('bqTema').value = q.tema;
+  document.getElementById('bqProcedimento').value = q.procedimento || "";
+  document.getElementById('bqTexto').value = q.texto;
+  document.getElementById('bqTipo').value = q.type;
+  document.getElementById('bqStatus').value = q.status;
+  bqRenderOptions(q.type, q.options);
+  document.getElementById('bqForm').scrollIntoView({behavior:'smooth', block:'start'});
+};
+window.deleteBQ = function(codigo){
+  questionBank = questionBank.filter(q=>q.codigo!==codigo);
+  logAction("Exclusão de pergunta", codigo);
+  renderBanco();
+  showToast("Pergunta removida do banco.","");
+};
+
+/* ======================= RESPONDER QUESTIONÁRIO — ESTILO DUOLINGO ======================= */
+window.openQuiz = function(campaignId){
+  const c = campaigns.find(x=>x.id===campaignId);
+  const existing = participants.find(p=>p.campaignId===campaignId && p.matricula===currentUser.matricula);
+  document.querySelectorAll('.section').forEach(s=>s.classList.remove('active'));
+  document.getElementById('sec-responder').classList.add('active');
+  document.getElementById('pageTitle').textContent = "Questionário";
+  document.getElementById('responderTitle').textContent = c.nome;
+  document.getElementById('responderSubtitle').textContent = existing ? "" : c.descricao;
+  if(existing){
+    renderQuizDoneInto(document.getElementById('responderBody'), c, existing);
+  } else {
+    startQuizFlow(c);
+  }
+};
+document.getElementById('btnVoltarCampanhas').addEventListener('click', ()=>{
+  const target = currentRole === 'qualidade' ? 'campanhas' : 'campanha-atual';
+  document.querySelectorAll('.menu-item').forEach(b=>b.classList.remove('active'));
+  const btn = document.querySelector(`[data-target="${target}"]`); if(btn) btn.classList.add('active');
+  goToSection(target);
+});
+
+function startQuizFlow(c){
+  const access = campaignAccessStatus(c);
+  const body = document.getElementById('responderBody');
+  if(access !== 'aberta'){
+    body.innerHTML = mascotBubble(access==='nao_iniciada' ? "Ainda não é hoje! Essa campanha abre em breve." : "Essa campanha já encerrou — mas fica de olho na próxima!") +
+      `<div class="lock-banner">
+      <div style="font-size:26px;">⏳</div>
+      <div>${access==='nao_iniciada' ? 'Esta campanha ainda não está aberta para respostas.' : 'O prazo para responder esta campanha já foi encerrado.'}</div>
+      <div class="hint">Período: ${c.inicio.replace('T',' ')} até ${c.fim.replace('T',' ')}</div>
+    </div>`;
+    return;
+  }
+  // Limite de participação: 1 resposta por matrícula (regra 12)
+  const already = participants.find(p=>p.campaignId===c.id && p.matricula===currentUser.matricula);
+  if(already){
+    showToast("Sua participação nesta campanha já foi registrada.", "warning");
+    renderQuizDoneInto(body, c, already);
+    return;
+  }
+  quizState = {campaign:c, index:0, answers:new Array(c.questoes.length).fill(null)};
+  renderQuizStep();
 }
 
-
-/* ============================================================
-   SINAL VERDE — Aprovação de Cartas (Analista/Gerente/Diretoria)
-   Parte do protótipo do Programa Sinal Verde (ver /README.md).
-   ============================================================ */
-
-// ---------------- Cartas — aprovação (Analista/Gerente/Diretoria) ----------------
-const STAGE_ROLE = { carta_analista: 'analista', carta_gerente: 'gerente', carta_diretoria: 'diretoria' };
-const NEXT_STAGE = { carta_analista: 'carta_gerente', carta_gerente: 'carta_diretoria', carta_diretoria: 'carta_pronta' };
-const ROLE_LABEL = { analista: 'Analista', gerente: 'Gerente', diretoria: 'Diretoria' };
-
-function renderAprovCartas() {
-  const stage = Object.keys(STAGE_ROLE).find(k => STAGE_ROLE[k] === SESSION.role);
-  const list = DB.ideias.filter(i => i.status === stage);
-  return `
-  <div class="panel"><div class="panel-body table-wrap">
-    <table class="data-table">
-      <thead><tr><th>Protocolo</th><th>Título</th><th>Tipo</th><th>Tempo na etapa</th><th></th></tr></thead>
-      <tbody>
-        ${list.map(i => {
-          const c = DB.cartas.find(x => x.id === i.cartaId);
-          const dias = diasDesde(i.dataCriacao);
-          return `<tr>
-            <td class="mono">${i.protocolo}</td>
-            <td style="max-width:260px">${esc(i.titulo)}</td>
-            <td>${c.tipo === 'aprovacao' ? '<span class="badge badge-success">Aprovação</span>' : '<span class="badge badge-error">Reprovação</span>'}</td>
-            <td>${slaBadgeFor(dias, 2)}</td>
-            <td><button class="btn btn-primary btn-sm" onclick="openCartaReviewModal('${c.id}')">Revisar</button></td>
-          </tr>`;
-        }).join('') || `<tr><td colspan="5"><div class="empty-state">${icon('inbox')}<div class="t">Nenhuma carta pendente para você</div></div></td></tr>`}
-      </tbody>
-    </table>
-  </div></div>`;
-}
-function openCartaReviewModal(cartaId) {
-  const c = DB.cartas.find(x => x.id === cartaId);
-  const idea = DB.ideias.find(i => i.id === c.ideiaId);
-  openDrawer(`
-    <div class="drawer-head"><div><h2>Carta — ${idea.protocolo}</h2><div class="p">v${c.versao} · ${esc(idea.titulo)}</div></div><button class="drawer-close" onclick="closeDrawer()">${icon('x')}</button></div>
-    <div class="drawer-body">
-      <div class="section-title">Conteúdo</div>
-      <div class="desc-box">${esc(c.conteudo)}</div>
-      ${c.comentarios.length ? `<div class="section-title">Comentários anteriores</div>${c.comentarios.map(cm => `<div class="desc-box" style="margin-bottom:8px"><b>${esc(cm.autor)}</b>: ${esc(cm.texto)}</div>`).join('')}` : ''}
-      <div class="section-title">Sua decisão</div>
-      <div style="display:flex;gap:10px">
-        <button class="btn btn-primary" style="flex:1" onclick="aprovarCarta('${c.id}')">${icon('check')} Aprovar</button>
-        <button class="btn btn-outline" style="flex:1" onclick="mostrarCorrecaoBox('${c.id}')">${icon('rotate-ccw')} Solicitar Correção</button>
-      </div>
-      <div id="correcaoBox" class="hidden" style="margin-top:14px">
-        <div class="field"><label>Comentário / correção solicitada</label><textarea id="correcaoTexto" placeholder="Descreva o que precisa ser ajustado..."></textarea></div>
-        <button class="btn btn-outline btn-block" onclick="solicitarCorrecao('${c.id}')">Enviar correção</button>
-      </div>
-    </div>`);
-}
-function mostrarCorrecaoBox(id) { document.getElementById('correcaoBox').classList.remove('hidden'); }
-function aprovarCarta(cartaId) {
-  const c = DB.cartas.find(x => x.id === cartaId);
-  const idea = DB.ideias.find(i => i.id === c.ideiaId);
-  const next = NEXT_STAGE[idea.status];
-  const roleAtual = ROLE_LABEL[STAGE_ROLE[idea.status]];
-  c.versao += 1;
-  c.historicoVersoes.push({ versao: c.versao, evento: `${roleAtual} aprovou.`, data: new Date().toISOString() });
-  idea.status = next; c.status = next;
-  addHistorico(idea, `${roleAtual} aprovou a carta.`);
-  addAudit(SESSION.user.nome, `Aprovou carta de ${idea.protocolo} (${roleAtual}).`);
-  if (next === 'carta_gerente') addNotif('gerente', `Nova carta para revisão: ${idea.protocolo}.`, 'mail-check');
-  if (next === 'carta_diretoria') addNotif('diretoria', `Carta aguardando aprovação institucional: ${idea.protocolo}.`, 'briefcase');
-  if (next === 'carta_pronta') addNotif('qualidade', `Carta de ${idea.protocolo} aprovada pela Diretoria e pronta para envio.`, 'badge-check');
-  closeDrawer(); toast(`Carta aprovada${next === 'carta_pronta' ? ' — pronta para envio' : ''}.`); refresh();
-}
-function solicitarCorrecao(cartaId) {
-  const texto = document.getElementById('correcaoTexto').value.trim();
-  if (!texto) { toast('Descreva a correção solicitada.'); return; }
-  const c = DB.cartas.find(x => x.id === cartaId);
-  const idea = DB.ideias.find(i => i.id === c.ideiaId);
-  const roleAtual = ROLE_LABEL[STAGE_ROLE[idea.status]];
-  c.comentarios.push({ autor: `${roleAtual} (${SESSION.user.nome})`, texto, data: new Date().toISOString(), versao: c.versao });
-  c.versao += 1;
-  c.historicoVersoes.push({ versao: c.versao, evento: `${roleAtual} solicitou correção.`, data: new Date().toISOString() });
-  idea.status = 'carta_elaboracao'; c.status = 'carta_elaboracao';
-  addHistorico(idea, `${roleAtual} solicitou correção na carta.`);
-  addAudit(SESSION.user.nome, `Solicitou correção na carta de ${idea.protocolo}.`);
-  addNotif('qualidade', `Correção solicitada (${roleAtual}) na carta de ${idea.protocolo}.`, 'rotate-ccw');
-  closeDrawer(); toast('Correção solicitada. A carta retornou para a Qualidade.'); refresh();
-}
-
-// ======================================================================
-// DIRETORIA — dashboard estratégico
-// ======================================================================
-function renderDiretoriaDashboard() {
-  const economiaConfirmada = DB.planos.filter(p => p.status === 'concluido').reduce((s, p) => s + p.economia.obtida, 0) + 4780000;
-  const aprovadas = DB.ideias.filter(i => i.decisao === 'aprovada').length;
-  const total = DB.ideias.length;
-  return `
-  <div class="kpi-grid">
-    ${kpiCard('trending-up', 'Economia acumulada', fmtMoney(economiaConfirmada))}
-    ${kpiCard('percent', 'ROI', '742%')}
-    ${kpiCard('badge-check', 'Taxa de aprovação', `${total ? Math.round(aprovadas / total * 100) : 0}%`)}
-    ${kpiCard('users', 'Participação', '72%')}
-  </div>
-  <div class="panel">
-    <div class="panel-head"><h3>Cartas aguardando sua aprovação</h3></div>
-    <div class="panel-body table-wrap">
-      ${(() => { const list = DB.ideias.filter(i => i.status === 'carta_diretoria'); return list.length ? `<table class="data-table"><tbody>${list.map(i => `<tr><td class="mono">${i.protocolo}</td><td>${esc(i.titulo)}</td><td><button class="btn btn-primary btn-sm" onclick="openCartaReviewModal('${i.cartaId}')">Revisar</button></td></tr>`).join('')}</tbody></table>` : `<div class="empty-state">${icon('sparkles')}<div class="t">Nenhuma carta pendente</div></div>`; })()}
-    </div>
-  </div>`;
-}
-
-
-/* ============================================================
-   SINAL VERDE — Portal da Qualidade — Implantação, BI, Usuários, Auditoria e Configurações
-   Parte do protótipo do Programa Sinal Verde (ver /README.md).
-   ============================================================ */
-
-// ---------------- Implantação ----------------
-function planoStatusLabel(s) {
-  return { planejamento: 'Planejamento', execucao: 'Execução', testes: 'Testes', validacao: 'Validação', concluido: 'Concluído', arquivado: 'Arquivado' }[s] || s;
-}
-function renderQualImplantacoes() {
-  const cols = ['planejamento', 'execucao', 'testes', 'validacao', 'concluido', 'arquivado'];
-  return `
-  <div class="panel"><div class="panel-body">
-    <div class="kanban-scroll">
-      ${cols.map(st => {
-        const items = DB.planos.filter(p => p.status === st);
-        return `<div class="kanban-col">
-          <div class="kanban-col-head"><span class="t">${planoStatusLabel(st)}</span><span class="n">${items.length}</span></div>
-          ${items.map(p => {
-            const idea = DB.ideias.find(i => i.id === p.ideiaId);
-            return `<div class="kanban-card" onclick="openPlanoDrawer('${p.id}')"><div class="p">${idea ? idea.protocolo : ''}</div><div class="t">${esc(p.titulo.replace('Plano de Implantação — ', ''))}</div><span class="badge badge-info">${fmtMoney(p.economia.prevista)}</span></div>`;
-          }).join('') || `<div class="kanban-empty">Vazio</div>`}
-        </div>`;
-      }).join('')}
-    </div>
-  </div></div>`;
-}
-function qualCriarPlanoModal(ideaId, afterSend) {
-  const idea = DB.ideias.find(i => i.id === ideaId);
-  openModal(`
-    <h3>Deseja criar o Plano de Implantação agora?</h3>
-    <p class="sub">${idea.protocolo} — ${esc(idea.titulo)}</p>
-    <div class="field"><label>Responsável pela implantação</label><input id="planoResp" value="${esc(idea.colaborador.nome)}"></div>
-    <div class="field"><label>Prazo</label><input id="planoPrazo" value="60 dias"></div>
-    <div class="field"><label>Prioridade</label>
-      <select id="planoPrioridade">${['baixa', 'normal', 'alta', 'critica'].map(p => `<option value="${p}" ${idea.prioridade === p ? 'selected' : ''}>${PRIORIDADE_META[p].label}</option>`).join('')}</select>
-    </div>
-    <div class="modal-actions"><button class="btn btn-outline" onclick="closeModal();refresh();">Depois</button><button class="btn btn-primary" onclick="criarPlano('${idea.id}')">Sim, criar agora</button></div>
-  `);
-}
-function criarPlano(ideaId) {
-  const idea = DB.ideias.find(i => i.id === ideaId);
-  const plano = criarPlanoParaIdeia(idea, { responsavel: document.getElementById('planoResp').value, prazo: document.getElementById('planoPrazo').value, prioridade: document.getElementById('planoPrioridade').value });
-  idea.planoId = plano.id; idea.status = 'implantacao';
-  addHistorico(idea, 'Plano de Implantação criado.');
-  addAudit(SESSION.user.nome, `Criou plano de implantação para ${idea.protocolo}.`);
-  addNotif('colaborador', `A implantação da sua ideia ${idea.protocolo} foi iniciada.`, 'rocket');
-  addNotif('comite', `Implantação iniciada para ${idea.protocolo}.`, 'rocket');
-  closeModal(); toast('Plano de Implantação criado.'); refresh();
-}
-function openPlanoDrawer(planoId, readonly) {
-  const p = DB.planos.find(x => x.id === planoId);
-  const idea = DB.ideias.find(i => i.id === p.ideiaId);
-  const isQual = SESSION.role === 'qualidade' && !readonly;
-  openDrawer(`
-    <div class="drawer-head"><div><h2>${esc(p.titulo)}</h2><div class="p">${idea ? idea.protocolo : ''}</div></div><button class="drawer-close" onclick="closeDrawer()">${icon('x')}</button></div>
-    <div class="drawer-body">
-      <div class="kv-grid">
-        <div class="kv"><div class="k">Responsável</div><div class="v">${esc(p.responsavel)}</div></div>
-        <div class="kv"><div class="k">Setor</div><div class="v">${esc(p.setor)}</div></div>
-        <div class="kv"><div class="k">Prazo</div><div class="v">${esc(p.prazo)}</div></div>
-        <div class="kv"><div class="k">Prioridade</div><div class="v">${badgePrioridade(p.prioridade)}</div></div>
-      </div>
-      <div class="section-title">Status do plano</div>
-      ${isQual ? `<select onchange="mudarStatusPlano('${p.id}', this.value)">${['planejamento', 'execucao', 'testes', 'validacao', 'concluido', 'arquivado'].map(s => `<option value="${s}" ${p.status === s ? 'selected' : ''}>${planoStatusLabel(s)}</option>`).join('')}</select>` : `<span class="badge badge-info">${planoStatusLabel(p.status)}</span>`}
-
-      <div class="section-title">Objetivo</div>
-      <div class="desc-box">${esc(p.objetivo)}</div>
-
-      <div class="section-title">Plano de ação</div>
-      ${p.acoes.map(a => `
-        <div class="kv" style="margin-bottom:8px;display:flex;justify-content:space-between;align-items:center">
-          <div><div class="v">${esc(a.descricao)}</div><div class="k">Resp.: ${esc(a.responsavel)} · Prazo: ${esc(a.prazo)}</div></div>
-          ${isQual ? `<select onchange="mudarStatusAcao('${p.id}','${a.id}', this.value)">${['nao_iniciada', 'em_andamento', 'concluida', 'pausada', 'cancelada'].map(s => `<option value="${s}" ${a.status === s ? 'selected' : ''}>${acaoStatusLabel(s)}</option>`).join('')}</select>` : `<span class="badge ${a.status === 'concluida' ? 'badge-success' : 'badge-info'}">${acaoStatusLabel(a.status)}</span>`}
-        </div>`).join('')}
-      ${isQual ? `<button class="btn btn-outline btn-sm" onclick="addAcaoModal('${p.id}')">${icon('plus')} Adicionar ação</button>` : ''}
-
-      <div class="section-title">Validação financeira</div>
-      <div class="kv-grid">
-        <div class="kv"><div class="k">Economia prevista</div><div class="v">${fmtMoney(p.economia.prevista)}</div></div>
-        <div class="kv"><div class="k">Economia obtida</div><div class="v">${fmtMoney(p.economia.obtida)}</div></div>
-      </div>
-      ${isQual ? `<button class="btn btn-outline btn-sm" style="margin-top:8px" onclick="registrarEconomiaModal('${p.id}')">${icon('calculator')} Registrar economia obtida</button>` : ''}
-
-      ${p.acompanhamentos.length ? `<div class="section-title">Acompanhamentos</div>${p.acompanhamentos.map(a => `<div class="desc-box" style="margin-bottom:8px"><b>${esc(a.periodo)}</b> — ${a.continua === 'sim' ? 'Continua funcionando' : a.continua === 'parcial' ? 'Funcionando parcialmente' : 'Não está funcionando'}. ${esc(a.observacoes || '')}</div>`).join('')}` : ''}
-      ${isQual ? `<button class="btn btn-outline btn-sm" onclick="addAcompanhamentoModal('${p.id}')">${icon('clipboard-check')} Registrar acompanhamento</button>` : ''}
-      ${SESSION.role === 'comite' && p.status !== 'concluido' ? `<button class="btn btn-outline btn-sm" onclick="comiteAvaliarEfetividade('${p.id}')">${icon('thumbs-up')} A melhoria foi eficaz?</button>` : ''}
-
-      ${isQual && p.status !== 'concluido' ? `<div class="section-title">Encerramento</div><button class="btn btn-primary btn-block" onclick="encerrarImplantacaoModal('${p.id}')">${icon('flag')} Encerrar Implantação</button>` : ''}
-    </div>`);
-}
-function acaoStatusLabel(s) { return { nao_iniciada: 'Não iniciada', em_andamento: 'Em andamento', concluida: 'Concluída', pausada: 'Pausada', cancelada: 'Cancelada' }[s] || s; }
-function mudarStatusPlano(planoId, status) {
-  const p = DB.planos.find(x => x.id === planoId);
-  p.status = status;
-  const idea = DB.ideias.find(i => i.id === p.ideiaId);
-  if (idea) idea.status = status === 'validacao' ? 'acompanhamento' : (status === 'concluido' || status === 'arquivado') ? idea.status : 'implantacao';
-  addAudit(SESSION.user.nome, `Alterou status do plano de ${idea ? idea.protocolo : p.id} para ${planoStatusLabel(status)}.`);
-  toast('Status do plano atualizado.'); openPlanoDrawer(planoId);
-}
-function mudarStatusAcao(planoId, acaoId, status) {
-  const p = DB.planos.find(x => x.id === planoId);
-  const a = p.acoes.find(x => x.id === acaoId);
-  a.status = status;
-  toast('Ação atualizada.');
-}
-function addAcaoModal(planoId) {
-  openModal(`<h3>Nova ação</h3>
-    <div class="field"><label>Descrição</label><input id="novaAcaoDesc"></div>
-    <div class="field"><label>Responsável</label><input id="novaAcaoResp"></div>
-    <div class="field"><label>Prazo</label><input id="novaAcaoPrazo" placeholder="Ex: 15 dias"></div>
-    <div class="modal-actions"><button class="btn btn-outline" onclick="closeModal()">Cancelar</button><button class="btn btn-primary" onclick="salvarAcao('${planoId}')">Adicionar</button></div>`);
-}
-function salvarAcao(planoId) {
-  const p = DB.planos.find(x => x.id === planoId);
-  p.acoes.push({ id: uid('A'), descricao: document.getElementById('novaAcaoDesc').value, responsavel: document.getElementById('novaAcaoResp').value, prazo: document.getElementById('novaAcaoPrazo').value, status: 'nao_iniciada' });
-  closeModal(); toast('Ação adicionada.'); openPlanoDrawer(planoId);
-}
-function registrarEconomiaModal(planoId) {
-  openModal(`<h3>Registrar economia obtida</h3><div class="field"><label>Valor (R$)</label><input type="number" id="econObtida"></div>
-  <div class="modal-actions"><button class="btn btn-outline" onclick="closeModal()">Cancelar</button><button class="btn btn-primary" onclick="salvarEconomia('${planoId}')">Salvar</button></div>`);
-}
-function salvarEconomia(planoId) {
-  const p = DB.planos.find(x => x.id === planoId);
-  p.economia.obtida = Number(document.getElementById('econObtida').value) || 0;
-  closeModal(); toast('Economia registrada.'); openPlanoDrawer(planoId);
-}
-function addAcompanhamentoModal(planoId) {
-  openModal(`<h3>Registrar acompanhamento</h3>
-    <div class="field"><label>Período</label><select id="acompPeriodo">${['30 dias', '60 dias', '90 dias', '180 dias', '365 dias'].map(p => `<option>${p}</option>`).join('')}</select></div>
-    <div class="field"><label>A ideia continua funcionando?</label><select id="acompContinua"><option value="sim">Sim</option><option value="parcial">Parcialmente</option><option value="nao">Não</option></select></div>
-    <div class="field"><label>Observações</label><textarea id="acompObs"></textarea></div>
-    <div class="modal-actions"><button class="btn btn-outline" onclick="closeModal()">Cancelar</button><button class="btn btn-primary" onclick="salvarAcompanhamento('${planoId}')">Salvar</button></div>`);
-}
-function salvarAcompanhamento(planoId) {
-  const p = DB.planos.find(x => x.id === planoId);
-  p.acompanhamentos.push({ periodo: document.getElementById('acompPeriodo').value, continua: document.getElementById('acompContinua').value, observacoes: document.getElementById('acompObs').value, data: new Date().toISOString() });
-  closeModal(); toast('Acompanhamento registrado.'); openPlanoDrawer(planoId);
-}
-function comiteAvaliarEfetividade(planoId) {
-  openModal(`<h3>A melhoria foi eficaz?</h3>
-    <div class="modal-actions" style="justify-content:center">
-      <button class="btn btn-outline" onclick="closeModal();toast('Resposta registrada: Não.')">Não</button>
-      <button class="btn btn-outline" onclick="closeModal();toast('Resposta registrada: Parcialmente.')">Parcialmente</button>
-      <button class="btn btn-primary" onclick="closeModal();toast('Resposta registrada: Sim.')">Sim</button>
-    </div>`);
-}
-function encerrarImplantacaoModal(planoId) {
-  const p = DB.planos.find(x => x.id === planoId);
-  openModal(`<h3>Confirma o encerramento desta implantação?</h3>
-    <div class="field"><label>Resultados atingidos?</label><select id="encResultado"><option value="sim">Sim</option><option value="parcial">Parcialmente</option><option value="nao">Não</option></select></div>
-    <div class="field"><label>Efetividade (0–100%)</label><input type="number" min="0" max="100" id="encEfetividade" value="${p.economia.prevista ? Math.round((p.economia.obtida || p.economia.prevista * 0.9) / p.economia.prevista * 100) : 90}"></div>
-    <div class="modal-actions"><button class="btn btn-outline" onclick="closeModal()">Cancelar</button><button class="btn btn-primary" onclick="encerrarImplantacao('${planoId}')">Confirmar</button></div>`);
-}
-function encerrarImplantacao(planoId) {
-  const p = DB.planos.find(x => x.id === planoId);
-  const idea = DB.ideias.find(i => i.id === p.ideiaId);
-  p.status = 'concluido';
-  if (!p.economia.obtida) p.economia.obtida = Math.round(p.economia.prevista * (Number(document.getElementById('encEfetividade').value) / 100));
-  idea.status = 'concluida';
-  addHistorico(idea, 'Implantação encerrada oficialmente.');
-  addAudit(SESSION.user.nome, `Encerrou implantação de ${idea.protocolo}.`);
-  addNotif('colaborador', `A implantação da sua ideia ${idea.protocolo} foi concluída. Obrigado pela contribuição!`, 'flag');
-  closeModal(); toast('Implantação encerrada.'); refresh();
-}
-
-// ---------------- Indicadores (BI) ----------------
-function renderQualIndicadores() {
-  const ideias = DB.ideias;
-  const total = ideias.length;
-  const aprovadas = ideias.filter(i => i.decisao === 'aprovada').length;
-  const reprovadas = ideias.filter(i => i.decisao === 'reprovada').length;
-  const economiaConfirmada = DB.planos.filter(p => p.status === 'concluido').reduce((s, p) => s + p.economia.obtida, 0);
-  const economiaPrevista = DB.planos.reduce((s, p) => s + p.economia.prevista, 0);
-  const porArea = {};
-  ideias.forEach(i => porArea[i.area] = (porArea[i.area] || 0) + 1);
-  const areaMax = Math.max(1, ...Object.values(porArea));
-  const seg = ideias.filter(i => i.categoria === 'seguranca').length;
-  const custo = ideias.filter(i => i.categoria === 'custos').length;
-
-  return `
-  <div class="kpi-grid">
-    ${kpiCard('list-checks', 'Total de ideias', total)}
-    ${kpiCard('badge-check', 'Aprovadas', `${aprovadas} (${total ? Math.round(aprovadas / total * 100) : 0}%)`)}
-    ${kpiCard('x-circle', 'Reprovadas', `${reprovadas} (${total ? Math.round(reprovadas / total * 100) : 0}%)`)}
-    ${kpiCard('coins', 'Economia confirmada', fmtMoney(economiaConfirmada))}
-  </div>
-  <div class="grid-2">
-    <div class="panel">
-      <div class="panel-head"><h3>Ideias por área</h3></div>
-      <div class="panel-body">
-        ${Object.entries(porArea).sort((a, b) => b[1] - a[1]).map(([area, n]) => hbarScaled(area, n, areaMax)).join('') || '<p style="color:var(--text-muted)">Sem dados.</p>'}
-      </div>
-    </div>
-    <div class="panel">
-      <div class="panel-head"><h3>Distribuição por categoria</h3></div>
-      <div class="panel-body">
-        <div class="donut-wrap">
-          ${donutSvg(seg, custo)}
-          <div class="legend-list">
-            <div><span class="dot" style="background:var(--error)"></span>Segurança — ${seg}</div>
-            <div><span class="dot" style="background:var(--primary)"></span>Redução de Custos — ${custo}</div>
-          </div>
+function renderQuizStep(){
+  const {campaign, index, answers} = quizState;
+  const q = campaign.questoes[index];
+  const total = campaign.questoes.length;
+  const progressPct = Math.round((index / total) * 100);
+  const body = document.getElementById('responderBody');
+  const selected = answers[index];
+  body.innerHTML = `
+    <div class="duo-wrap">
+      <div class="duo-progress"><div class="duo-progress-fill" style="width:${progressPct}%"></div></div>
+      <div class="duo-counter">Pergunta ${index+1} de ${total}</div>
+      <div class="duo-card" id="duoCard">
+        <div class="duo-question">${q.texto}</div>
+        <div class="duo-options">
+          ${q.options.map((o,oi)=>{
+            const isSel = Array.isArray(selected) ? selected.includes(oi) : selected === oi;
+            return `<button type="button" class="duo-option ${isSel?'selected':''}" data-oi="${oi}">${o.text}</button>`;
+          }).join('')}
         </div>
       </div>
-    </div>
-  </div>
-  <div class="panel">
-    <div class="panel-head"><h3>Economia — prevista vs. confirmada</h3></div>
-    <div class="panel-body">
-      <div class="bars">
-        ${barCol('Prevista', economiaPrevista, Math.max(economiaPrevista, economiaConfirmada, 1))}
-        ${barCol('Confirmada', economiaConfirmada, Math.max(economiaPrevista, economiaConfirmada, 1))}
+      <div class="duo-nav">
+        <button class="btn btn-outline" id="duoBack" ${index===0?'disabled':''}>← Voltar</button>
+        <button class="btn btn-primary" id="duoContinue">${index===total-1?'Finalizar':'Continuar'}</button>
       </div>
+      <p class="hint" style="text-align:center; margin-top:14px;">Você poderá enviar apenas uma resposta para esta campanha, vinculada à sua matrícula.</p>
+    </div>`;
+
+  body.querySelectorAll('.duo-option').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      const oi = Number(btn.dataset.oi);
+      if(q.type === 'multiplas_respostas'){
+        let arr = Array.isArray(answers[index]) ? [...answers[index]] : [];
+        if(arr.includes(oi)) arr = arr.filter(x=>x!==oi); else arr.push(oi);
+        answers[index] = arr;
+      } else {
+        answers[index] = oi;
+      }
+      renderQuizStep();
+    });
+  });
+  document.getElementById('duoBack').addEventListener('click', ()=>{
+    quizState.index = Math.max(0, index-1);
+    renderQuizStep();
+  });
+  const contBtn = document.getElementById('duoContinue');
+  const hasAnswer = Array.isArray(selected) ? selected.length>0 : (selected !== null && selected !== undefined);
+  contBtn.disabled = !hasAnswer;
+  contBtn.addEventListener('click', ()=>{
+    if(index < total-1){ quizState.index++; renderQuizStep(); }
+    else { finalizeQuiz(); }
+  });
+}
+
+function isCorrect(q, ans){
+  if(q.type === 'multiplas_respostas'){
+    const correctSet = new Set(q.options.map((o,i)=>o.correct?i:null).filter(x=>x!==null));
+    const ansSet = new Set(ans||[]);
+    if(correctSet.size !== ansSet.size) return false;
+    for(const i of correctSet) if(!ansSet.has(i)) return false;
+    return true;
+  }
+  if(ans===undefined || ans===null) return false;
+  return !!(q.options[ans] && q.options[ans].correct);
+}
+
+function finalizeQuiz(){
+  const {campaign, answers} = quizState;
+  const respostasCorretas = campaign.questoes.map((q,i)=> isCorrect(q, answers[i]));
+  const correctCount = respostasCorretas.filter(Boolean).length;
+  const pct = Math.round(correctCount / campaign.questoes.length * 100);
+  const novoParticipante = {
+    campaignId: campaign.id, nome: currentUser.nome, matricula: currentUser.matricula,
+    setor: currentUser.setor, filial: currentUser.filial, funcao: currentUser.funcao, cargo: currentUser.cargo,
+    data: new Date(), pct, respostasCorretas
+  };
+  participants.push(novoParticipante);
+  fillCampaignSelects();
+  renderDashboard(); renderParticipantsTable(); renderEligibleTable(); renderSorteioSetup();
+  renderQuizDoneInto(document.getElementById('responderBody'), campaign, novoParticipante);
+  saveState();
+  quizState = null;
+}
+
+/* Univaldo, o mascote oficial da Univale Transportes.
+   modo "pro" = versão discreta/profissional, usada no painel da Qualidade. */
+const MASCOT_IMG = "assets/mascote-feliz.png";
+const MASCOT_BLINK_IMG = "assets/mascote-piscando.png";
+const MASCOT_NOME = "Univaldo";
+function mascotBubble(texto, opts){
+  const pro = opts && opts.pro;
+  const img = (opts && opts.img) || MASCOT_IMG;
+  return `<div class="mascot-row ${pro ? 'mascot-pro' : ''}">
+    <div class="mascot-avatar">
+      <img class="m-base" src="${img}" alt="Univaldo">
+      <img class="m-blink" src="${MASCOT_BLINK_IMG}" alt="">
     </div>
-  </div>
-  <div class="panel">
-    <div class="panel-head"><h3>Insights Inteligentes</h3><span class="sub">Resumo executivo gerado automaticamente</span></div>
-    <div class="panel-body">
-      <ul style="margin:0;padding-left:18px;font-size:13.5px;line-height:1.9;color:var(--text-secondary)">
-        <li>A área de <b>${Object.entries(porArea).sort((a, b) => b[1] - a[1])[0]?.[0] || '—'}</b> é a que mais envia ideias no momento.</li>
-        <li>A taxa de aprovação atual é de <b>${total ? Math.round(aprovadas / total * 100) : 0}%</b>.</li>
-        <li>Ideias de <b>Redução de Custos</b> representam <b>${total ? Math.round(custo / total * 100) : 0}%</b> do total enviado.</li>
-        <li>Economia acumulada confirmada até o momento: <b>${fmtMoney(economiaConfirmada)}</b>.</li>
-      </ul>
-    </div>
+    <div class="mascot-speech"><span class="mascot-name">${MASCOT_NOME}</span>${texto}</div>
   </div>`;
 }
-function hbarScaled(label, val, max) { return `<div class="hbar-row"><span class="name">${esc(label)}</span><div class="hbar-track"><div class="hbar-fill" style="width:${Math.round(val / max * 100)}%"></div></div><span class="n">${val}</span></div>`; }
-function barCol(label, val, max) { const h = Math.max(6, Math.round(val / max * 140)); return `<div class="bar-col"><span class="val">${fmtMoney(val)}</span><div class="bar" style="height:${h}px"></div><span class="lbl">${label}</span></div>`; }
-function donutSvg(seg, custo) {
-  const total = Math.max(1, seg + custo);
-  const segPct = seg / total; const r = 44, c = 2 * Math.PI * r;
-  return `<svg width="120" height="120" viewBox="0 0 120 120">
-    <circle cx="60" cy="60" r="${r}" fill="none" stroke="var(--primary)" stroke-width="18"/>
-    <circle cx="60" cy="60" r="${r}" fill="none" stroke="var(--error)" stroke-width="18"
-      stroke-dasharray="${c * segPct} ${c}" transform="rotate(-90 60 60)"/>
+function renderQualidadeTip(){
+  const el = document.getElementById('qualidadeTip');
+  if(!el) return;
+  const dicas = [];
+  const encerrandoEm3Dias = campaigns.filter(c=>{
+    if(c.status !== 'andamento') return false;
+    const dias = (new Date(c.fim) - new Date()) / (1000*60*60*24);
+    return dias > 0 && dias <= 3;
+  });
+  const finalizadasSemSorteio = campaigns.filter(c=>c.status==='encerrada' && !c.ganhadores);
+  const total100 = campaigns.reduce((a,c)=> a + evaluateEligibility(c.id).eligible.length, 0);
+
+  if(finalizadasSemSorteio.length){
+    dicas.push(`${finalizadasSemSorteio.length} campanha(s) encerrada(s) já podem ter o sorteio executado — dá uma olhada em "Sorteio".`);
+  }
+  if(encerrandoEm3Dias.length){
+    dicas.push(`${encerrandoEm3Dias.length} campanha(s) encerram nos próximos 3 dias — bom momento para divulgar de novo o link.`);
+  }
+  dicas.push(`Hoje há ${total100} colaborador(es) com 100% de acertos somando todas as campanhas.`);
+
+  el.innerHTML = mascotBubble(dicas[0], {pro:true});
+}
+
+function confettiHTML(){
+  const emojis = ["🎉","🎊","⭐","✨","🏆"];
+  let spans = "";
+  for(let i=0;i<14;i++){
+    const left = Math.round(Math.random()*100);
+    const delay = (Math.random()*0.6).toFixed(2);
+    const size = 14 + Math.round(Math.random()*10);
+    spans += `<span style="left:${left}%; animation-delay:${delay}s; font-size:${size}px;">${randomFrom(emojis)}</span>`;
+  }
+  return `<div class="duo-confetti">${spans}</div>`;
+}
+
+/* Tela final — exatamente o que o colaborador deve ver, nada de gabarito ou
+   detalhamento de acertos/erros por pergunta (isso fica exclusivo da Qualidade). */
+function renderQuizDoneInto(container, c, participant){
+  const correctCount = participant.respostasCorretas ? participant.respostasCorretas.filter(Boolean).length : Math.round(participant.pct/100*c.questoes.length);
+  const perfeito = participant.pct === 100;
+  const mascotImg = perfeito ? "assets/mascote-comemorando.png" : "assets/mascote-feliz.png";
+  const mascotMsg = perfeito
+    ? "Mandou muito bem! 100% de acertos — boa sorte no sorteio! 🍀"
+    : "Valeu por participar! Continue de olho nas próximas campanhas. 💪";
+  container.innerHTML = `
+    <div class="duo-done">
+      ${perfeito ? confettiHTML() : ''}
+      <img src="${mascotImg}" class="mascot-figure" alt="Univaldo">
+      <h2>Obrigado por participar!</h2>
+      <p>Sua participação foi registrada com sucesso.</p>
+      <div class="duo-score">Você acertou <b>${correctCount} de ${c.questoes.length}</b> perguntas.</div>
+      <p class="hint">Boa sorte no sorteio!</p>
+    </div>
+    ${mascotBubble(mascotMsg)}`;
+}
+
+function renderRegulamentoStats(){
+  const el = document.getElementById('regulamentoStats');
+  if(!el) return;
+  const totalCampanhas = campaigns.length;
+  const totalPremiados = new Set(wonHistory.map(w=>w.matricula)).size;
+  const allParts = participants;
+  const media = allParts.length ? Math.round(allParts.reduce((a,p)=>a+p.pct,0)/allParts.length) : 0;
+  const totalElegiveisHoje = campaigns.reduce((a,c)=> a + evaluateEligibility(c.id).eligible.length, 0);
+  el.innerHTML = `<div class="transp-stats">
+    <div class="transp-stat"><b>${totalCampanhas}</b><span>Campanhas realizadas</span></div>
+    <div class="transp-stat"><b>${totalPremiados}</b><span>Colaboradores já premiados</span></div>
+    <div class="transp-stat"><b>${media}%</b><span>Média geral de acertos</span></div>
+    <div class="transp-stat"><b>${totalElegiveisHoje}</b><span>Elegíveis somando as rodadas</span></div>
+  </div>`;
+}
+
+/* ======================= PÁGINAS DO COLABORADOR ======================= */
+function colaboradorStreakStrip(){
+  const mine = participants.filter(p=>p.matricula===currentUser.matricula);
+  const total = mine.length;
+  const media = total ? Math.round(mine.reduce((a,p)=>a+p.pct,0)/total) : 0;
+  const premios = campaigns.filter(c=>c.ganhadores && c.ganhadores.some(w=>w.matricula===currentUser.matricula)).length;
+  return `<div class="streak-strip">
+    <div class="streak-chip fire"><div class="si">🔥</div><div><b>${total}</b><span>Campanhas respondidas</span></div></div>
+    <div class="streak-chip star"><div class="si">⭐</div><div><b>${media}%</b><span>Média de acertos</span></div></div>
+    <div class="streak-chip trophy"><div class="si">🏆</div><div><b>${premios}</b><span>Vezes premiado(a)</span></div></div>
+  </div>`;
+}
+function renderCampanhaAtual(){
+  const body = document.getElementById('campanhaAtualBody');
+  if(!body) return;
+  const open = campaigns.filter(c=>campaignAccessStatus(c)==='aberta');
+  let html = mascotBubble(`Oi, ${currentUser.nome.split(' ')[0]}! ${open.length ? 'Tem campanha nova esperando por você aqui embaixo 👇' : 'Nenhuma campanha aberta agora, mas fica de olho — aviso assim que abrir uma nova!'}`);
+  html += colaboradorStreakStrip();
+  if(!open.length){
+    html += `<div class="panel fun-empty">
+      <div class="fe-icon">🕒</div>
+      <h3>Nenhuma campanha em andamento</h3>
+      <p class="hint">Assim que uma nova campanha do PPG for aberta, ela aparecerá aqui.</p>
+    </div>`;
+    body.innerHTML = html;
+    return;
+  }
+  html += open.map(c=>{
+    const answered = participants.some(p=>p.campaignId===c.id && p.matricula===currentUser.matricula);
+    return `<div class="panel">
+      <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:12px; flex-wrap:wrap;">
+        <div><h3>${c.nome}</h3><p class="hint" style="margin-top:6px; max-width:480px;">${c.descricao}</p></div>
+        ${statusBadge(c.status)}
+      </div>
+      <div class="meta" style="margin:14px 0;">
+        <span>📅 Responda até ${c.fim.replace('T',' ')}</span>
+        <span>🏆 Prêmio: ${c.premio || 'a definir'}</span>
+      </div>
+      ${answered
+        ? `<button class="btn btn-ghost" onclick="openQuiz('${c.id}')">Ver meu resultado</button>`
+        : `<button class="btn btn-primary" onclick="openQuiz('${c.id}')">🚀 Responder agora</button>`}
+    </div>`;
+  }).join('');
+  body.innerHTML = html;
+}
+function renderHistoricoColaborador(){
+  const body = document.getElementById('historicoColabBody');
+  if(!body) return;
+  const mine = participants.filter(p=>p.matricula===currentUser.matricula).sort((a,b)=>b.data-a.data);
+  let html = mascotBubble("Aqui está tudo que você já respondeu até agora. Bora conferir? 📋");
+  html += mine.map(p=>{
+    const c = campaigns.find(x=>x.id===p.campaignId);
+    return `<div class="panel" style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px;">
+      <div><h3 style="font-size:14.5px;">${c ? c.nome : p.campaignId}</h3><p class="hint" style="margin-top:4px;">Respondido em ${fmtDateTime(p.data)}</p></div>
+      <div style="display:flex; align-items:center; gap:12px;">
+        <span style="font-family:'Manrope'; font-weight:800; font-size:18px; color:var(--secondary);">${p.pct}%</span>
+        <button class="btn btn-outline btn-sm" onclick="openQuiz('${p.campaignId}')">Ver resultado</button>
+      </div>
+    </div>`;
+  }).join('') || `<div class="panel fun-empty"><div class="fe-icon">📭</div>Você ainda não participou de nenhuma campanha.</div>`;
+  body.innerHTML = html;
+}
+function renderMeuResultado(){
+  const body = document.getElementById('meuResultadoBody');
+  if(!body) return;
+  const mine = participants.filter(p=>p.matricula===currentUser.matricula).sort((a,b)=>b.data-a.data);
+  if(!mine.length){
+    body.innerHTML = mascotBubble("Você ainda não respondeu nenhuma campanha — que tal começar agora?") +
+      `<div class="panel fun-empty"><div class="fe-icon">🤔</div>Assim que você responder, seu resultado mais recente aparece aqui.</div>`;
+    return;
+  }
+  const latest = mine[0];
+  const c = campaigns.find(x=>x.id===latest.campaignId);
+  renderQuizDoneInto(body, c, latest);
+}
+
+/* ======================= SORTEIO ======================= */
+let sorteioRunning = false;
+function renderSorteioSetup(){
+  const sel = document.getElementById('selectCampanhaSorteio');
+  if(!sel.value) return;
+  const id = sel.value;
+  const {eligible, excluded} = evaluateEligibility(id);
+  document.getElementById('eligibleStrip').innerHTML = `<span style="font-size:12px; color:var(--ink-soft); margin-right:4px;">Elegíveis:</span>` +
+    eligible.map(p=>`<span class="chip">${p.nome} · ${p.setor}</span>`).join('') +
+    excluded.map(p=>`<span class="chip excluded" title="${p.motivo}">${p.nome}</span>`).join('');
+  const setoresRepresentados = new Set(eligible.map(p=>p.setor)).size;
+  const filiaisRepresentadas = new Set(eligible.map(p=>p.filial)).size;
+  document.getElementById('sorteioStats').innerHTML = `
+    <div class="stat"><b>${eligible.length}</b><span>Total de elegíveis</span></div>
+    <div class="stat"><b>${excluded.length}</b><span>Excluídos por regra</span></div>
+    <div class="stat"><b>${setoresRepresentados}</b><span>Setores representados</span></div>
+    <div class="stat"><b>${filiaisRepresentadas}</b><span>Filiais representadas</span></div>`;
+  document.getElementById('randomSeedWrap').style.display = "none";
+  document.getElementById('justificationBox').style.display = "none";
+  buildEmptySlots(id);
+}
+document.getElementById('selectCampanhaSorteio').addEventListener('change', renderSorteioSetup);
+function buildEmptySlots(campaignId){
+  const c = campaigns.find(x=>x.id===campaignId);
+  const n = (c && c.qtdGanhadores) || 4;
+  const slotsEl = document.getElementById('slots');
+  slotsEl.innerHTML = "";
+  for(let i=0;i<n;i++) slotsEl.innerHTML += `<div class="slot" id="slot${i}"><div class="pos">${i+1}º LUGAR</div><div class="name">—</div><div class="info">aguardando sorteio</div></div>`;
+  document.getElementById('sorteioResultActions').style.display = "none";
+}
+function pickFairWinners(pool, need){
+  const shuffled = [...pool].sort(()=>Math.random()-0.5);
+  const winners = []; const usedSetores = new Set(), usedFiliais = new Set();
+  for(const p of shuffled){ if(winners.length>=need) break; if(!usedSetores.has(p.setor) || !usedFiliais.has(p.filial)){ winners.push(p); usedSetores.add(p.setor); usedFiliais.add(p.filial); } }
+  for(const p of shuffled){ if(winners.length>=need) break; if(!winners.includes(p)) winners.push(p); }
+  const distinctSetores = new Set(winners.map(w=>w.setor)).size;
+  const fair = distinctSetores === Math.min(need, new Set(pool.map(p=>p.setor)).size);
+  return {winners, fair, distinctSetores};
+}
+document.getElementById('btnSortear').addEventListener('click', ()=>{
+  if(sorteioRunning) return;
+  const id = document.getElementById('selectCampanhaSorteio').value;
+  const {eligible} = evaluateEligibility(id);
+  const c = campaigns.find(x=>x.id===id);
+  const need = (c && c.qtdGanhadores) || 4;
+  if(eligible.length === 0){ showToast("Não há colaboradores elegíveis após aplicar as regras de elegibilidade.","warning"); return; }
+  if(eligible.length < need) showToast(`Apenas ${eligible.length} elegível(is) disponível(is) para ${need} vagas — sorteando o possível.`,"warning");
+  sorteioRunning = true;
+  buildEmptySlots(id);
+  const slotEls = Array.from(document.querySelectorAll('.slot'));
+  slotEls.forEach(s=>s.classList.add('rolling'));
+  const finalCount = Math.min(need, eligible.length);
+  const {winners, fair, distinctSetores} = pickFairWinners(eligible, finalCount);
+  const seed = Math.floor(100000000 + Math.random()*899999999).toString();
+  let ticks = 0; const maxTicks = 22; const rollNames = eligible.map(p=>p.nome);
+  const interval = setInterval(()=>{
+    ticks++;
+    slotEls.forEach((slotEl,i)=>{ if(i<finalCount){ slotEl.querySelector('.name').textContent = randomFrom(rollNames); } });
+    if(ticks >= maxTicks){ clearInterval(interval); revealWinners(slotEls, winners, id, seed, fair, distinctSetores, eligible); }
+  }, 80);
+});
+function revealWinners(slotEls, winners, campaignId, seed, fair, distinctSetores, eligible){
+  winners.forEach((w,i)=>{
+    setTimeout(()=>{
+      const slotEl = slotEls[i];
+      slotEl.classList.remove('rolling'); slotEl.classList.add('won');
+      slotEl.querySelector('.name').textContent = w.nome;
+      slotEl.querySelector('.info').textContent = `${w.matricula} · ${w.setor} · ${w.filial}`;
+      if(i === winners.length-1){
+        sorteioRunning = false;
+        document.getElementById('sorteioResultActions').style.display = "flex";
+        document.getElementById('randomSeedWrap').style.display = "block";
+        document.getElementById('randomSeedValue').textContent = seed;
+        const justBox = document.getElementById('justificationBox');
+        if(!fair){
+          justBox.style.display = "block";
+          justBox.textContent = `⚠ Distribuição justa parcial: havia apenas ${distinctSetores || new Set(eligible.map(e=>e.setor)).size} setor(es) distinto(s) entre os elegíveis, portanto não foi possível garantir total diversidade. Justificativa registrada no histórico para auditoria.`;
+        } else justBox.style.display = "none";
+        window._lastSorteio = {campaignId, winners, seed, fair, distinctSetores, eligibleCount: eligible.length};
+        showToast(`Sorteio concluído! ${winners.length} ganhador(es) selecionado(s).`,"success");
+      }
+    }, i*350);
+  });
+  for(let i=winners.length;i<slotEls.length;i++){ slotEls[i].classList.remove('rolling'); slotEls[i].querySelector('.info').textContent = "sem elegível disponível"; }
+}
+document.getElementById('btnResetSorteio').addEventListener('click', ()=>{ if(!sorteioRunning) renderSorteioSetup(); });
+document.getElementById('btnValidarSorteio').addEventListener('click', ()=>{
+  showToast("Resultado validado por Mariana Queiroz (Qualidade).","success");
+  logAction("Sorteio validado", "Resultado confirmado pela equipe da Qualidade.");
+});
+document.getElementById('btnRelatorioOficial').addEventListener('click', ()=>{
+  if(!window._lastSorteio){ showToast("Realize o sorteio antes de gerar o relatório.","warning"); return; }
+  const {campaignId, winners, seed} = window._lastSorteio;
+  const c = campaigns.find(x=>x.id===campaignId);
+  const headers = ["Posição","Nome","Matrícula","Setor","Filial"];
+  const rows = winners.map((w,i)=>[i+1, w.nome, w.matricula, w.setor, w.filial]);
+  openPrintReport(`Relatório oficial do sorteio — ${c.nome}`, headers, rows, `Número aleatório utilizado: ${seed} · Gerado em ${fmtDateTime(new Date())}`);
+  logAction("Relatório oficial gerado", c.nome);
+});
+document.getElementById('btnRegistrarHistorico').addEventListener('click', ()=>{
+  if(!window._lastSorteio) return;
+  const {campaignId, winners, seed, fair, distinctSetores, eligibleCount} = window._lastSorteio;
+  const c = campaigns.find(x=>x.id===campaignId);
+  c.ganhadores = winners.map(w=>({nome:w.nome, matricula:w.matricula, setor:w.setor, filial:w.filial, funcao:w.funcao}));
+  c.status = "finalizada"; c.randomSeed = seed; c.responsavel = "Mariana Queiroz";
+  c.justificativa = fair ? `Distribuição justa alcançada entre ${distinctSetores} setor(es) distintos.` : `Distribuição parcial: apenas ${distinctSetores} setor(es) representado(s) entre os ${eligibleCount} elegíveis.`;
+  winners.forEach(w=> wonHistory.push({matricula:w.matricula, data:new Date()}));
+  historyLog.unshift({campaignId, data:new Date(), texto:`Sorteio realizado para a campanha ${c.nome}.`});
+  logAction("Sorteio registrado no histórico", c.nome);
+  fillCampaignSelects();
+  showToast("Sorteio registrado no histórico para auditoria.","success");
+  document.querySelector('[data-target="historico"]').click();
+});
+
+/* ======================= RELATÓRIOS (exportação real) ======================= */
+function downloadCSV(filename, headers, rows){
+  const escape = v => `"${String(v).replace(/"/g,'""')}"`;
+  const csv = [headers.map(escape).join(';'), ...rows.map(r=>r.map(escape).join(';'))].join('\r\n');
+  const blob = new Blob(["\uFEFF"+csv], {type:'text/csv;charset=utf-8;'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = filename; document.body.appendChild(a); a.click();
+  document.body.removeChild(a); URL.revokeObjectURL(url);
+}
+function buildBarChartSVG(labels, values, opts){
+  opts = opts || {};
+  const w = 580, h = 240, padTop = 30, padBottom = 50, padSide = 20;
+  const innerH = h - padTop - padBottom;
+  const max = Math.max(...values, 1);
+  const n = values.length || 1;
+  const gap = 14;
+  const barW = Math.max(16, (w - padSide*2 - gap*(n-1)) / n);
+  let bars = "";
+  values.forEach((v,i)=>{
+    const barH = Math.round((v/max) * innerH);
+    const x = padSide + i*(barW+gap);
+    const y = h - padBottom - barH;
+    const label = String(labels[i]||'').length > 15 ? String(labels[i]).slice(0,14)+'…' : String(labels[i]||'');
+    bars += `<rect x="${x.toFixed(1)}" y="${y}" width="${barW.toFixed(1)}" height="${barH}" fill="#02A39D" rx="5"/>`;
+    bars += `<text x="${(x+barW/2).toFixed(1)}" y="${y-6}" font-size="11" text-anchor="middle" fill="#00695C" font-family="Arial">${v}${opts.suffix||''}</text>`;
+    bars += `<text x="${(x+barW/2).toFixed(1)}" y="${h-padBottom+16}" font-size="9.5" text-anchor="middle" fill="#5B7370" font-family="Arial">${label}</text>`;
+  });
+  return `<svg width="${w}" height="${h}" viewBox="0 0 ${w} ${h}" xmlns="http://www.w3.org/2000/svg" style="max-width:100%;">
+    <line x1="${padSide}" y1="${h-padBottom}" x2="${w-padSide}" y2="${h-padBottom}" stroke="#E3ECEA"/>
+    ${bars}
   </svg>`;
 }
-
-// ---------------- Usuários ----------------
-function renderQualUsuarios() {
-  const users = [
-    { nome: 'Marina Costa', perfil: 'Colaborador', setor: 'Operação', status: 'Ativo' },
-    { nome: 'João Silva', perfil: 'Colaborador', setor: 'Oficina', status: 'Ativo' },
-    { nome: 'Rafael Nunes', perfil: 'Comitê', setor: 'Segurança do Trabalho', status: 'Ativo' },
-    { nome: 'Fernanda Dias', perfil: 'Comitê', setor: 'Administrativo', status: 'Ativo' },
-    { nome: 'Isabella Ramos', perfil: 'Qualidade', setor: 'Qualidade', status: 'Ativo' },
-    { nome: 'Camila Alves', perfil: 'Analista da Qualidade', setor: 'Qualidade', status: 'Ativo' },
-    { nome: 'Eduardo Lima', perfil: 'Gerente da Qualidade', setor: 'Qualidade', status: 'Ativo' },
-    { nome: 'Roberto Cardoso', perfil: 'Diretoria', setor: 'Diretoria', status: 'Ativo' },
-  ];
-  return `
-  <div class="panel">
-    <div class="panel-head"><h3>Usuários cadastrados</h3><button class="btn btn-primary btn-sm" onclick="toast('Cadastro de usuário simulado neste protótipo.')">${icon('user-plus')} Novo usuário</button></div>
-    <div class="panel-body table-wrap">
-      <table class="data-table">
-        <thead><tr><th>Nome</th><th>Perfil</th><th>Setor</th><th>Status</th><th></th></tr></thead>
-        <tbody>${users.map(u => `<tr><td>${esc(u.nome)}</td><td><span class="badge badge-info">${u.perfil}</span></td><td>${esc(u.setor)}</td><td><span class="badge badge-success">${u.status}</span></td><td><button class="link-btn" onclick="toast('Reset de senha enviado por e-mail.')">Resetar senha</button></td></tr>`).join('')}</tbody>
-      </table>
-    </div>
-  </div>`;
+function openPrintReport(title, headers, rows, footNote, chartSvg){
+  const win = window.open('', '_blank');
+  if(!win){ showToast("O navegador bloqueou a abertura da janela de impressão.","warning"); return; }
+  win.document.write(`
+    <html><head><title>${title}</title>
+    <style>
+      body{font-family:Arial,sans-serif; padding:32px; color:#0F2A28;}
+      h1{font-size:18px; color:#00695C; margin-bottom:4px;}
+      p.meta{color:#5B7370; font-size:12px; margin-top:0;}
+      table{width:100%; border-collapse:collapse; margin-top:18px;}
+      th,td{border:1px solid #E3ECEA; padding:8px 10px; font-size:12px; text-align:left;}
+      th{background:#F7F9FB; color:#5B7370; text-transform:uppercase; font-size:10px;}
+      .chart-wrap{margin-top:16px; text-align:center;}
+    </style></head><body>
+    <h1>PPG · Programa Política de Gestão</h1>
+    <p class="meta">${title} — gerado em ${fmtDateTime(new Date())}</p>
+    ${chartSvg ? `<div class="chart-wrap">${chartSvg}</div>` : ''}
+    <table><thead><tr>${headers.map(h=>`<th>${h}</th>`).join('')}</tr></thead>
+    <tbody>${rows.map(r=>`<tr>${r.map(c=>`<td>${c}</td>`).join('')}</tr>`).join('')}</tbody></table>
+    ${footNote ? `<p class="meta" style="margin-top:16px;">${footNote}</p>` : ''}
+    </body></html>`);
+  win.document.close();
+  win.focus();
+  setTimeout(()=> win.print(), 300);
 }
-
-// ---------------- Auditoria ----------------
-function renderQualAuditoria() {
-  return `
-  <div class="panel"><div class="panel-body table-wrap">
-    <table class="data-table">
-      <thead><tr><th>Data/hora</th><th>Usuário</th><th>Ação</th></tr></thead>
-      <tbody>${DB.auditoria.map(a => `<tr><td class="mono">${fmtDateTime(a.data)}</td><td>${esc(a.usuario)}</td><td>${esc(a.acao)}</td></tr>`).join('')}</tbody>
-    </table>
-  </div></div>
-  <p style="font-size:12px;color:var(--text-muted)">${icon('lock', '')} Nenhum registro de auditoria pode ser apagado — nem por administradores.</p>`;
-}
-
-// ---------------- Configurações ----------------
-function renderQualConfig() {
-  const slas = [
-    ['Recebimento da ideia', '1 dia útil'], ['Agendamento da reunião', '5 dias úteis'], ['Parecer do Comitê', '5 dias úteis'],
-    ['Decisão da Qualidade', '3 dias úteis'], ['Elaboração da carta', '3 dias úteis'], ['Aprovação da Analista', '2 dias úteis'],
-    ['Aprovação da Gerente', '2 dias úteis'], ['Aprovação da Diretoria', '3 dias úteis'], ['Envio da carta', '2 dias úteis'],
-    ['Criação do plano de implantação', '5 dias úteis'],
-  ];
-  return `
-  <div class="grid-2">
-    <div class="panel">
-      <div class="panel-head"><h3>SLA por etapa</h3></div>
-      <div class="panel-body table-wrap">
-        <table class="data-table"><thead><tr><th>Etapa</th><th>Prazo padrão</th></tr></thead>
-        <tbody>${slas.map(([e, d]) => `<tr><td>${e}</td><td><input value="${d}" style="border:1px solid var(--border);border-radius:6px;padding:5px 8px;font-size:12.5px;width:120px"></td></tr>`).join('')}</tbody></table>
-        <button class="btn btn-primary btn-sm" style="margin-top:12px" onclick="toast('Configurações de SLA salvas.')">Salvar</button>
-      </div>
-    </div>
-    <div class="panel">
-      <div class="panel-head"><h3>Áreas cadastradas</h3></div>
-      <div class="panel-body">
-        <div class="chip-list">${AREAS.map(a => `<span class="chip">${a}</span>`).join('')}</div>
-        <button class="btn btn-outline btn-sm" style="margin-top:12px" onclick="toast('Cadastro de área simulado neste protótipo.')">${icon('plus')} Nova área</button>
-      </div>
-    </div>
-  </div>`;
-}
-
-
-/* ============================================================
-   SINAL VERDE — Mascote flutuante
-   Parte do protótipo do Programa Sinal Verde (ver /README.md).
-
-   A pedido, o mascote hoje é um EMOJI animado (💡, o mesmo ícone
-   da logo oficial) — um placeholder rápido e leve enquanto a
-   arte definitiva do mascote oficial da Univale não fica pronta.
-   Para trocar depois, basta mudar MASCOT_EMOJI abaixo (ou
-   substituir por um <img>/SVG dentro de renderMascotFigure()) —
-   toda a lógica de abrir, fechar e trocar de dica continua igual.
-   ============================================================ */
-
-const MASCOT_NAME = 'Univaldo';
-const MASCOT_ROLE = 'seu guia no Sinal Verde';
-const MASCOT_EMOJI = '💡';
-
-function renderMascotFigure() {
-  return `<span class="mascot-emoji">${MASCOT_EMOJI}</span>`;
-}
-
-const MASCOT_TIPS = [
-  'Dica: você pode salvar sua ideia como rascunho e continuar depois — nada se perde.',
-  'Quanto mais detalhada a descrição da sua ideia, mais fácil fica para o Comitê avaliar.',
-  'Toda ideia recebe um protocolo único, tipo SV-2026-000185, para você acompanhar o andamento.',
-  'Ideias parecidas com outras já enviadas aparecem automaticamente — assim evitamos duplicidade.',
-  'Ideias de redução de custo com economia estimada tendem a ser avaliadas mais rápido.',
-  'Você pode acompanhar cada etapa da sua ideia em "Minhas Ideias", sem precisar perguntar para ninguém.',
-  'Toda carta aprovada vira um selo na sua aba "Conquistas" — dá uma olhada lá!',
-];
-
-let mascotOpen = false;
-let mascotTipIndex = 0;
-
-function mascotInit() {
-  const fab = document.createElement('button');
-  fab.className = 'mascot-fab';
-  fab.id = 'mascotFab';
-  fab.setAttribute('aria-label', `Assistente ${MASCOT_NAME}`);
-  fab.innerHTML = renderMascotFigure();
-  fab.onclick = mascotToggle;
-  document.body.appendChild(fab);
-
-  const bubble = document.createElement('div');
-  bubble.className = 'mascot-bubble hidden';
-  bubble.id = 'mascotBubble';
-  document.body.appendChild(bubble);
-
-  mascotRenderBubble();
-
-  // Depois de alguns segundos, o mascote aparece uma vez sozinho
-  // com uma dica de boas-vindas (como o "aceninho" de apps do tipo
-  // Duolingo) — só nesta sessão, sem repetir a cada clique.
-  setTimeout(() => {
-    if (!mascotOpen) mascotToggle();
-  }, 2600);
-}
-
-function mascotRenderBubble() {
-  const bubble = document.getElementById('mascotBubble');
-  if (!bubble) return;
-  bubble.innerHTML = `
-    <div class="mascot-bubble-head">
-      ${renderMascotFigure()}
-      <div>
-        <div class="name">${MASCOT_NAME}</div>
-        <div class="role">${MASCOT_ROLE}</div>
-      </div>
-      <button class="mascot-bubble-close" onclick="mascotToggle()" aria-label="Fechar">${icon('x')}</button>
-    </div>
-    <p>${MASCOT_TIPS[mascotTipIndex]}</p>
-    <div class="mascot-bubble-actions">
-      <button class="btn btn-outline btn-sm" onclick="mascotNextTip()">Outra dica</button>
-    </div>`;
-}
-
-function mascotToggle() {
-  mascotOpen = !mascotOpen;
-  document.getElementById('mascotBubble').classList.toggle('hidden', !mascotOpen);
-}
-
-function mascotNextTip() {
-  mascotTipIndex = (mascotTipIndex + 1) % MASCOT_TIPS.length;
-  mascotRenderBubble();
-}
-
-// ======================================================================
-// CONFETE — celebração rápida (envio de ideia, ideia aprovada etc.)
-// ======================================================================
-const CONFETTI_COLORS = ['#02A39D', '#00695C', '#F9A825', '#2E7D32', '#C08A1E'];
-function celebrateConfetti(count) {
-  const layer = document.createElement('div');
-  layer.className = 'confetti-layer';
-  document.body.appendChild(layer);
-  const n = count || 26;
-  for (let i = 0; i < n; i++) {
-    const piece = document.createElement('span');
-    piece.className = 'confetti-piece';
-    const left = Math.random() * 100;
-    const delay = Math.random() * 0.3;
-    const duration = 1.4 + Math.random() * 1.1;
-    const color = CONFETTI_COLORS[Math.floor(Math.random() * CONFETTI_COLORS.length)];
-    piece.style.left = left + 'vw';
-    piece.style.background = color;
-    piece.style.animationDelay = delay + 's';
-    piece.style.animationDuration = duration + 's';
-    piece.style.top = (-10 - Math.random() * 20) + 'px';
-    layer.appendChild(piece);
+function buildReportData(reportType, campaignId){
+  const c = campaigns.find(x=>x.id===campaignId);
+  if(reportType === 'participantes'){
+    const rows = campaignParticipants(campaignId).map(p=>[p.nome,p.matricula,p.cargo,p.setor,p.filial,fmtDateTime(p.data),p.pct+"%"]);
+    return {title:`Lista de participantes — ${c.nome}`, headers:["Nome","Matrícula","Cargo","Setor","Filial","Data/hora","% Acertos"], rows};
   }
-  setTimeout(() => layer.remove(), 3000);
+  if(reportType === 'elegiveis'){
+    const {eligible} = evaluateEligibility(campaignId);
+    const rows = eligible.map((p,i)=>[i+1,p.nome,p.matricula,p.cargo,p.setor,p.filial,fmtDateTime(p.data)]);
+    return {title:`Elegíveis ao sorteio — ${c.nome}`, headers:["#","Nome","Matrícula","Cargo","Setor","Filial","Data/hora"], rows};
+  }
+  if(reportType === 'ganhadores'){
+    const rows = (c.ganhadores||[]).map((w,i)=>[i+1,w.nome,w.matricula,w.setor,w.filial,w.funcao]);
+    return {title:`Ganhadores sorteados — ${c.nome}`, headers:["Posição","Nome","Matrícula","Setor","Filial","Função"], rows};
+  }
+  if(reportType === 'distribuicao'){
+    const allWinners = campaigns.filter(x=>x.ganhadores).flatMap(x=>x.ganhadores);
+    const rows = allWinners.map(w=>[w.nome,w.setor,w.filial,w.funcao]);
+    const counts = {};
+    allWinners.forEach(w=> counts[w.setor] = (counts[w.setor]||0)+1);
+    const chartSvg = Object.keys(counts).length ? buildBarChartSVG(Object.keys(counts), Object.values(counts)) : null;
+    return {title:`Distribuição de ganhadores por setor/filial/função — todas as campanhas`, headers:["Nome","Setor","Filial","Função"], rows, chartSvg};
+  }
+  if(reportType === 'auditoria'){
+    const rows = [[c.nome, c.criterios||"—", c.randomSeed||"—", c.responsavel||"—", c.justificativa||"—"]];
+    return {title:`Registro de auditoria do sorteio — ${c.nome}`, headers:["Campanha","Critérios aplicados","Nº aleatório","Responsável","Justificativa"], rows};
+  }
+  if(reportType === 'historico'){
+    const rows = campaigns.filter(x=>x.ganhadores || x.status==='encerrada').map(x=>[x.nome, x.inicio.replace('T',' '), x.fim.replace('T',' '), campaignParticipants(x.id).length, x.ganhadores?x.ganhadores.length:0]);
+    return {title:"Histórico completo de campanhas", headers:["Campanha","Início","Encerramento","Participantes","Ganhadores"], rows};
+  }
+  if(reportType === 'comparativo'){
+    const rows = campaigns.map(x=>{
+      const parts = campaignParticipants(x.id);
+      const media = parts.length ? Math.round(parts.reduce((a,p)=>a+p.pct,0)/parts.length) : 0;
+      const {eligible} = evaluateEligibility(x.id);
+      return [x.nome, parts.length, eligible.length, media+"%", x.ganhadores?x.ganhadores.length:0, x.status];
+    });
+    const chartSvg = buildBarChartSVG(campaigns.map(x=>x.nome.split('–')[0].trim()), campaigns.map(x=>campaignParticipants(x.id).length), {suffix:' resp.'});
+    return {title:"Comparativo entre campanhas", headers:["Campanha","Participantes","Elegíveis","Média de acertos","Ganhadores","Status"], rows, chartSvg};
+  }
+  if(reportType === 'evolucao'){
+    const ordered = [...campaigns].sort((a,b)=> new Date(a.inicio) - new Date(b.inicio));
+    const rows = ordered.map(x=>{
+      const parts = campaignParticipants(x.id);
+      const media = parts.length ? Math.round(parts.reduce((a,p)=>a+p.pct,0)/parts.length) : 0;
+      return [x.inicio.replace('T',' '), x.nome, parts.length, media+"%"];
+    });
+    const chartSvg = buildBarChartSVG(ordered.map(x=>x.nome.split('–')[0].trim()), ordered.map(x=>{
+      const parts = campaignParticipants(x.id);
+      return parts.length ? Math.round(parts.reduce((a,p)=>a+p.pct,0)/parts.length) : 0;
+    }), {suffix:'%'});
+    return {title:"Evolução histórica — média de acertos por campanha ao longo do tempo", headers:["Início","Campanha","Participantes","Média de acertos"], rows, chartSvg};
+  }
+}
+document.querySelectorAll('.report-btn').forEach(btn=>{
+  btn.addEventListener('click', ()=>{
+    const campaignId = document.getElementById('selectCampanhaRelatorio').value;
+    const data = buildReportData(btn.dataset.report, campaignId);
+    if(!data.rows.length){ showToast("Não há dados para exportar neste relatório.","warning"); return; }
+    if(btn.dataset.type === "Excel"){
+      downloadCSV(data.title.replace(/[^\w]+/g,'_') + ".csv", data.headers, data.rows);
+      showToast("Arquivo .csv baixado (compatível com Excel).","success");
+    } else {
+      openPrintReport(data.title, data.headers, data.rows, null, data.chartSvg);
+      showToast("Abrindo visualização para impressão/PDF.","success");
+    }
+    logAction("Relatório exportado", `${btn.dataset.report} (${btn.dataset.type})`);
+  });
+});
+
+/* ======================= HISTÓRICO (Qualidade) ======================= */
+function renderTimeline(){
+  document.getElementById('timeline').innerHTML = campaigns.filter(c=>c.status==="finalizada" || c.status==="encerrada").map(c=>{
+    const {eligible} = evaluateEligibility(c.id);
+    const winnersHtml = c.ganhadores ? `<div class="tl-winners">${c.ganhadores.map(w=>`<span class="chip">🏆 ${w.nome} · ${w.setor}</span>`).join('')}</div>` : `<div class="tl-winners"><span class="chip">Sorteio pendente de execução</span></div>`;
+    const metaHtml = c.ganhadores ? `
+      <div class="tl-meta"><span>👥 ${campaignParticipants(c.id).length} participantes</span><span>✅ ${eligible.length} elegíveis avaliados</span><span>🎲 nº aleatório: ${c.randomSeed || "—"}</span><span>👤 responsável: ${c.responsavel || "—"}</span></div>
+      <div class="hint" style="margin-top:6px;">${c.justificativa || ""}</div>` : "";
+    return `<div class="tl-item"><div class="tl-dot"></div><div class="tl-body"><h4>${c.nome}</h4><p>${c.inicio.replace('T',' ')} → ${c.fim.replace('T',' ')} · ${statusBadge(c.status)}</p>${winnersHtml}${metaHtml}</div></div>`;
+  }).join('') || `<p style="color:var(--ink-soft); font-size:13px;">Nenhuma campanha encerrada ainda.</p>`;
 }
 
-document.addEventListener('DOMContentLoaded', () => {
-  try { mascotInit(); } catch (e) { console.error('Falha ao iniciar o mascote:', e); }
-});
+/* ======================= INIT ======================= */
+const _hadSavedState = loadState();
+fillCampaignSelects();
+renderDashboard();
+renderCampaignGrid();
+renderParticipantsTable();
+renderEligibleTable();
+renderSorteioSetup();
+renderTimeline();
+renderBanco();
+if(window.lucide) lucide.createIcons();
 
-/* ============================================================
-   SINAL VERDE — Tratamento de erros e inicialização
-   Parte do protótipo do Programa Sinal Verde (ver /README.md).
-   ============================================================ */
-
-// ======================================================================
-// TRATAMENTO GLOBAL DE ERROS — evita tela em branco silenciosa
-// ======================================================================
-window.addEventListener('error', (e) => {
-  console.error('Erro no Sinal Verde:', e.error || e.message);
-  try {
-    if (document.getElementById('toastStack')) toast('Ocorreu um erro inesperado nesta ação. Veja o console (F12) para detalhes.');
-  } catch (_) { /* evita erro em cascata */ }
-});
-
-// ======================================================================
-// INIT
-// ======================================================================
-document.addEventListener('DOMContentLoaded', () => {
-  try {
-    seed();
-    renderTeamRoleList();
-    lucide.createIcons();
-  } catch (e) {
-    console.error('Falha ao inicializar o Sinal Verde:', e);
-  }
-});
+if(_hadSavedState && currentUser){
+  document.getElementById('loginScreen').style.display = "none";
+  document.getElementById('appRoot').style.display = "flex";
+  applyRole(currentUser.role);
+  showToast(`Sessão restaurada — bem-vindo(a) de volta, ${currentUser.nome}.`, "");
+} else if(_hadSavedState){
+  showToast("Dados salvos anteriormente neste navegador foram restaurados.", "");
+} else {
+  saveState(); // primeira vez neste navegador: grava os dados de demonstração como ponto de partida
+}
