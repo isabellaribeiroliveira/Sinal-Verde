@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Sinal Verde — Gestão de Ideias e Inovação</title>
+<meta name="description" content="Protótipo do Sistema Sinal Verde: gestão de ideias, inovação, redução de custos e segurança.">
+
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<!-- ================= LOGIN ================= -->
+<div class="login-screen" id="loginScreen">
+
+  <div class="login-showcase">
+    <div class="login-showcase-inner">
+      <div class="lamp-lg">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18h6"/><path d="M10 22h4"/><path d="M15.09 14c.18-.98.65-1.74 1.41-2.5A4.65 4.65 0 0 0 18 8 6 6 0 0 0 6 8c0 1 .23 2.23 1.5 3.5A4.61 4.61 0 0 1 8.91 14"/></svg>
+      </div>
+      <h1>Sinal Verde</h1>
+      <p class="tagline">Programa de Ideias e Melhorias</p>
+
+      <div class="showcase-feature">
+        <span class="num">1</span>
+        <span>
+          <div class="t">Envie suas ideias</div>
+          <div class="d">Compartilhe sugestões de melhoria</div>
+        </span>
+      </div>
+      <div class="showcase-feature">
+        <span class="num">2</span>
+        <span>
+          <div class="t">Acompanhe o progresso</div>
+          <div class="d">Veja em tempo real o status</div>
+        </span>
+      </div>
+      <div class="showcase-feature">
+        <span class="num">3</span>
+        <span>
+          <div class="t">Seja reconhecido</div>
+          <div class="d">As melhores ideias geram economia</div>
+        </span>
+      </div>
+    </div>
+  </div>
+
+  <div class="login-form-col">
+    <div class="login-form-wrap">
+      <div class="brand-mark">
+        <div class="lamp">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18h6"/><path d="M10 22h4"/><path d="M15.09 14c.18-.98.65-1.74 1.41-2.5A4.65 4.65 0 0 0 18 8 6 6 0 0 0 6 8c0 1 .23 2.23 1.5 3.5A4.61 4.61 0 0 1 8.91 14"/></svg>
+        </div>
+        <div class="wordmark">Sinal Verde<small>Programa de Melhoria Contínua</small></div>
+      </div>
+
+      <h1 class="login-title" id="loginTitle">Bem-vindo de volta</h1>
+      <p class="login-sub" id="loginSub">Acesse com sua matrícula e senha.</p>
+
+      <div id="loginTabColab">
+        <div class="field has-ic">
+          <label>Matrícula</label>
+          <span class="field-ic"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4 4-7 8-7s8 3 8 7"/></svg></span>
+          <input type="text" id="loginMatricula" placeholder="Digite sua matrícula" value="10234">
+        </div>
+        <div class="field has-ic has-toggle">
+          <label>Senha</label>
+          <span class="field-ic" id="loginSenhaIcon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg></span>
+          <input type="password" id="loginSenhaColab" placeholder="CPF ou senha cadastrada" value="demo">
+          <button type="button" class="field-toggle" id="loginSenhaToggle" onclick="togglePasswordField('loginSenhaColab', this)"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s4-7 10-7 10 7 10 7-4 7-10 7-10-7-10-7z"/><circle cx="12" cy="12" r="3"/></svg></button>
+        </div>
+        <button class="btn btn-primary btn-block" onclick="loginColaborador()">Entrar <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg></button>
+
+        <div class="login-divider">ou</div>
+        <div class="login-link-row">
+          <button onclick="toast('Fluxo de primeiro acesso simulado neste protótipo.')"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="4"/><path d="M2 21c0-4 3.5-7 7-7s7 3 7 7"/><line x1="19" y1="8" x2="19" y2="14"/><line x1="16" y1="11" x2="22" y2="11"/></svg>Primeiro acesso — definir minha senha</button>
+        </div>
+      </div>
+
+      <div id="loginTabTeam" class="hidden">
+        <div class="role-list" id="teamRoleList"></div>
+        <div class="login-link-row" style="margin-top:14px">
+          <button onclick="switchLoginTab('colab')"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></svg>Voltar</button>
+        </div>
+      </div>
+
+      <div class="login-foot" id="loginFootAdmin">
+        <button onclick="switchLoginTab('team')"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2l8 4v6c0 5-3.5 8-8 10-4.5-2-8-5-8-10V6z"/></svg>Acesso Administrativo</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+
+<!-- ================= APP SHELL ================= -->
+<div class="app-shell" id="appShell">
+  <aside class="sidebar">
+    <div class="brand-mark">
+      <div class="lamp">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18h6"/><path d="M10 22h4"/><path d="M15.09 14c.18-.98.65-1.74 1.41-2.5A4.65 4.65 0 0 0 18 8 6 6 0 0 0 6 8c0 1 .23 2.23 1.5 3.5A4.61 4.61 0 0 1 8.91 14"/></svg>
+      </div>
+      <div class="wordmark">Sinal Verde<small id="sidebarPortalLabel">Portal</small></div>
+    </div>
+    <nav id="sidebarNav"></nav>
+    <div class="sidebar-foot">
+      <div class="user-chip" id="userChip"></div>
+      <button class="btn btn-outline btn-block btn-sm" style="margin-top:10px" onclick="logout()">Sair</button>
+    </div>
+  </aside>
+
+  <div class="main-col">
+    <header class="topbar">
+      <div>
+        <h1 id="viewTitle">Título</h1>
+        <div class="sub" id="viewSub"></div>
+      </div>
+      <div class="topbar-actions">
+        <button class="icon-btn" onclick="openNotifPanel()" title="Notificações">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></svg>
+          <span class="badge-dot" id="notifDot"></span>
+        </button>
+      </div>
+    </header>
+    <main class="view" id="viewRoot"></main>
+  </div>
+</div>
+
+<!-- ================= DRAWER (detalhes) ================= -->
+<div class="overlay" id="drawerOverlay" onclick="if(event.target===this) closeDrawer()">
+  <div class="drawer" id="drawerContent"></div>
+</div>
+
+<!-- ================= MODAL (formulários rápidos) ================= -->
+<div class="modal-center" id="modalOverlay" onclick="if(event.target===this) closeModal()">
+  <div class="modal-box" id="modalContent"></div>
+</div>
+
+<!-- ================= TOASTS ================= -->
+<div class="toast-stack" id="toastStack"></div>
+
+<script src="script.js"></script>
+</body>
+</html>
